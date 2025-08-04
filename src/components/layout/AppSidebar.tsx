@@ -52,16 +52,16 @@ export function AppSidebar() {
 
   const getNavClassName = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "transition-all duration-200 group text-foreground",
+      "transition-all duration-200 group",
       isActive 
         ? "bg-gradient-primary text-primary-foreground shadow-glow border border-primary/20" 
-        : "hover:bg-secondary/80 hover:text-foreground border border-transparent text-muted-foreground hover:text-foreground"
+        : "hover:bg-secondary text-foreground border border-transparent hover:text-foreground"
     );
 
   return (
     <Sidebar
       className={cn(
-        "border-r border-border/50 bg-background transition-all duration-300",
+        "border-r border-border/50 bg-card transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
       collapsible="icon"
@@ -87,7 +87,7 @@ export function AppSidebar() {
         {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupLabel className={cn(
-            "text-xs uppercase tracking-wider text-muted-foreground mb-2",
+            "text-xs uppercase tracking-wider text-foreground/70 mb-2 font-medium",
             collapsed && "sr-only"
           )}>
             Navigation
@@ -120,7 +120,7 @@ export function AppSidebar() {
         {/* Tools Section */}
         <SidebarGroup className="mt-6">
           <SidebarGroupLabel className={cn(
-            "text-xs uppercase tracking-wider text-muted-foreground mb-2",
+            "text-xs uppercase tracking-wider text-foreground/70 mb-2 font-medium",
             collapsed && "sr-only"
           )}>
             Analytics Tools
