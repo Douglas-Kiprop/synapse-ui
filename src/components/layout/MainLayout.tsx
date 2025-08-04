@@ -28,7 +28,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <AppSidebar />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col lg:mr-80">
+        <div className="flex-1 flex flex-col lg:mr-96">
           {/* Header */}
           <header className="h-14 border-b border-border/50 bg-gradient-card flex items-center px-4 sticky top-0 z-10">
             <SidebarTrigger className="mr-4">
@@ -44,7 +44,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         </div>
 
         {/* Chat Panel - Fixed Right Side */}
-        <div className="fixed right-0 top-0 h-full w-80 border-l border-border/50 bg-background z-20 hidden lg:block">
+        <div className="fixed right-0 top-0 h-full w-96 border-l border-border/50 bg-background z-20 hidden lg:block">
           <ChatPanel 
             onApplyStrategy={handleApplyStrategy}
             currentStrategy={currentStrategy}

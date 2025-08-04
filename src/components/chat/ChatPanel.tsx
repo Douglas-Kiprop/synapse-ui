@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Zap, CheckCircle } from "lucide-react";
+import { Send, Bot, User, Zap, CheckCircle, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { StrategyBubble } from "./StrategyBubble";
 
 interface Message {
   id: string;
@@ -27,6 +28,21 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
       content: "Welcome to Synapse! I'm your crypto analytics agent with access to 20 powerful tools. How can I help you craft or refine your investment strategy today?",
       sender: "agent",
       timestamp: new Date(),
+    },
+    {
+      id: "4",
+      content: "strategy",
+      sender: "agent",
+      timestamp: new Date(Date.now() - 1000 * 30),
+      strategy: {
+        name: "DeFi Yield Farming Strategy",
+        type: "Yield Farming",
+        allocation: "$25,000",
+        timeframe: "3-6 months",
+        expectedReturn: "15-25% APY",
+        riskLevel: "Medium" as const,
+        description: "A balanced approach to yield farming across multiple DeFi protocols with automated rebalancing and risk management."
+      }
     }
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -97,12 +113,11 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
       {/* Header */}
       <div className="p-4 border-b border-border/50">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
-            <Bot className="w-5 h-5 text-primary-foreground" />
+          <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">
+            <Brain className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
-            <h3 className="font-semibold text-foreground">Synapse Agent</h3>
-            <p className="text-xs text-muted-foreground">20 Analytics Tools</p>
+            <h3 className="text-lg font-bold text-foreground">Synapse Agent</h3>
           </div>
         </div>
       </div>
@@ -120,22 +135,36 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
             >
               {message.sender === "agent" && (
                 <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-4 h-4 text-primary-foreground" />
+                  <Brain className="w-4 h-4 text-primary-foreground" />
                 </div>
               )}
               
               <div
                 className={cn(
-                  "max-w-[80%] p-3 rounded-lg",
-                  message.sender === "user"
-                    ? "bg-primary text-primary-foreground ml-auto"
-                    : "bg-secondary text-secondary-foreground"
+                  "max-w-[80%]",
+                  message.sender === "user" ? "ml-auto" : ""
                 )}
               >
-                <p className="text-sm">{message.content}</p>
-                <span className="text-xs opacity-70 mt-1 block">
-                  {message.timestamp.toLocaleTimeString()}
-                </span>
+                {message.content === "strategy" && message.strategy ? (
+                  <StrategyBubble 
+                    strategy={message.strategy} 
+                    onApply={onApplyStrategy || (() => {})}
+                  />
+                ) : (
+                  <div
+                    className={cn(
+                      "p-3 rounded-lg",
+                      message.sender === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary text-secondary-foreground"
+                    )}
+                  >
+                    <p className="text-sm">{message.content}</p>
+                    <span className="text-xs opacity-70 mt-1 block">
+                      {message.timestamp.toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {message.sender === "user" && (
@@ -149,7 +178,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
           {isLoading && (
             <div className="flex gap-3 justify-start">
               <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
-                <Bot className="w-4 h-4 text-primary-foreground" />
+                <Brain className="w-4 h-4 text-primary-foreground" />
               </div>
               <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
                 <div className="flex items-center gap-2">

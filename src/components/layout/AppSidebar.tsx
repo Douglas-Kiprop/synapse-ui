@@ -52,16 +52,16 @@ export function AppSidebar() {
 
   const getNavClassName = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "transition-all duration-200 group",
+      "transition-all duration-200 group text-foreground",
       isActive 
         ? "bg-gradient-primary text-primary-foreground shadow-glow border border-primary/20" 
-        : "hover:bg-secondary/50 hover:text-foreground border border-transparent"
+        : "hover:bg-secondary/80 hover:text-foreground border border-transparent text-muted-foreground hover:text-foreground"
     );
 
   return (
     <Sidebar
       className={cn(
-        "border-r border-border bg-gradient-card transition-all duration-300",
+        "border-r border-border/50 bg-background transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
       collapsible="icon"
@@ -70,7 +70,7 @@ export function AppSidebar() {
         {/* Logo/Brand */}
         <div className="mb-6 px-3 py-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
               <Zap className="w-5 h-5 text-primary-foreground" />
             </div>
             {!collapsed && (
