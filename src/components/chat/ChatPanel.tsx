@@ -1,0 +1,203 @@
+import { useState, useRef, useEffect } from "react";
+import { Send, Bot, User, Zap, CheckCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+
+interface Message {
+  id: string;
+  content: string;
+  sender: "user" | "agent";
+  timestamp: Date;
+  strategy?: any; // For strategy transfer from StrategyBuilder
+}
+
+interface ChatPanelProps {
+  onApplyStrategy?: (strategy: any) => void;
+  currentStrategy?: any;
+}
+
+export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      content: "Welcome to Synapse! I'm your crypto analytics agent with access to 20 powerful tools. How can I help you craft or refine your investment strategy today?",
+      sender: "agent",
+      timestamp: new Date(),
+    }
+  ]);
+  const [inputValue, setInputValue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasStrategyToApply, setHasStrategyToApply] = useState(false);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    // Check if current strategy can be applied
+    setHasStrategyToApply(!!currentStrategy);
+  }, [currentStrategy]);
+
+  const handleSendMessage = async () => {
+    if (!inputValue.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: inputValue,
+      sender: "user",
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue("");
+    setIsLoading(true);
+
+    // Simulate API call to backend agent
+    setTimeout(() => {
+      const agentResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: `I've analyzed your request: "${inputValue}". Based on my 20 analytical tools, here's my recommendation: [This would be the actual response from your backend agent with tool access]`,
+        sender: "agent",
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => [...prev, agentResponse]);
+      setIsLoading(false);
+    }, 1500);
+  };
+
+  const handleApplyStrategy = () => {
+    if (onApplyStrategy && currentStrategy) {
+      onApplyStrategy(currentStrategy);
+      toast({
+        title: "Strategy Applied",
+        description: "Your strategy has been updated in the Strategy Builder.",
+      });
+      setHasStrategyToApply(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  return (
+    <Card className="h-full flex flex-col bg-gradient-card border-border/50 shadow-card">
+      {/* Header */}
+      <div className="p-4 border-b border-border/50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
+            <Bot className="w-5 h-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground">Synapse Agent</h3>
+            <p className="text-xs text-muted-foreground">20 Analytics Tools</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "flex gap-3",
+                message.sender === "user" ? "justify-end" : "justify-start"
+              )}
+            >
+              {message.sender === "agent" && (
+                <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-4 h-4 text-primary-foreground" />
+                </div>
+              )}
+              
+              <div
+                className={cn(
+                  "max-w-[80%] p-3 rounded-lg",
+                  message.sender === "user"
+                    ? "bg-primary text-primary-foreground ml-auto"
+                    : "bg-secondary text-secondary-foreground"
+                )}
+              >
+                <p className="text-sm">{message.content}</p>
+                <span className="text-xs opacity-70 mt-1 block">
+                  {message.timestamp.toLocaleTimeString()}
+                </span>
+              </div>
+
+              {message.sender === "user" && (
+                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center flex-shrink-0">
+                  <User className="w-4 h-4 text-secondary-foreground" />
+                </div>
+              )}
+            </div>
+          ))}
+          
+          {isLoading && (
+            <div className="flex gap-3 justify-start">
+              <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                <Bot className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <div className="bg-secondary text-secondary-foreground p-3 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.2s" }} />
+                  <div className="w-2 h-2 bg-primary rounded-full animate-pulse" style={{ animationDelay: "0.4s" }} />
+                  <span className="text-sm ml-2">Analyzing...</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Apply Strategy Button */}
+      {hasStrategyToApply && (
+        <div className="p-3 border-t border-border/50 bg-secondary/20">
+          <Button 
+            onClick={handleApplyStrategy}
+            className="w-full bg-crypto-green hover:bg-crypto-green/90 text-white"
+            size="sm"
+          >
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Apply Strategy to Builder
+          </Button>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="p-4 border-t border-border/50">
+        <div className="flex gap-2">
+          <Input
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Ask about strategies, market analysis, or any crypto insights..."
+            className="flex-1 bg-background/50 border-border/50 focus:border-primary"
+            disabled={isLoading}
+          />
+          <Button 
+            onClick={handleSendMessage}
+            disabled={!inputValue.trim() || isLoading}
+            className="bg-gradient-primary hover:shadow-glow transition-all duration-200"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
