@@ -77,7 +77,20 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
     setIsLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8765/chat/", {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL;
+
+      if (!backendUrl) {
+        console.error("VITE_BACKEND_URL is not defined in the environment variables.");
+        toast({
+          title: "Error",
+          description: "Backend URL is not configured. Please check your .env files.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const response = await fetch(backendUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
