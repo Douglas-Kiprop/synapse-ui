@@ -4,13 +4,15 @@ import { AppSidebar } from "./AppSidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
+import { AgentPanelProvider, useAgentPanel } from "@/contexts/AgentPanelContext";
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
 
-export function MainLayout({ children }: MainLayoutProps) {
+function LayoutBody({ children }: MainLayoutProps) {
   const [currentStrategy, setCurrentStrategy] = useState(null);
+  const { agentOpen } = useAgentPanel();
 
   const handleStrategyChange = (strategy: any) => {
     setCurrentStrategy(strategy);
@@ -28,7 +30,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <AppSidebar />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col lg:mr-96">
+        <div className={cn("flex-1 flex flex-col", agentOpen ? "lg:mr-96" : "lg:mr-0")}>
           {/* Header */}
           <header className="h-14 border-b border-border/50 bg-gradient-card flex items-center px-4 sticky top-0 z-10">
             <SidebarTrigger className="mr-4">
@@ -44,7 +46,12 @@ export function MainLayout({ children }: MainLayoutProps) {
         </div>
 
         {/* Chat Panel - Fixed Right Side */}
-        <div className="fixed right-0 top-0 h-full w-96 border-l border-border/50 bg-background z-20 hidden lg:block">
+        <div
+          className={cn(
+            agentOpen ? "fixed right-0 top-0 h-full w-96 border-l border-border/50 bg-background z-20 hidden lg:block"
+                      : "hidden"
+          )}
+        >
           <ChatPanel 
             onApplyStrategy={handleApplyStrategy}
             currentStrategy={currentStrategy}
@@ -52,5 +59,13 @@ export function MainLayout({ children }: MainLayoutProps) {
         </div>
       </div>
     </SidebarProvider>
+  );
+}
+
+export function MainLayout({ children }: MainLayoutProps) {
+  return (
+    <AgentPanelProvider>
+      <LayoutBody>{children}</LayoutBody>
+    </AgentPanelProvider>
   );
 }

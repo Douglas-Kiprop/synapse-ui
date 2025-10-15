@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Zap, CheckCircle, Brain } from "lucide-react";
+import { Send, Bot, User, Zap, CheckCircle, Brain, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { StrategyBubble } from "./StrategyBubble";
+import { useAgentPanel } from "@/contexts/AgentPanelContext";
 
 interface Message {
   id: string;
@@ -50,6 +51,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
   const [hasStrategyToApply, setHasStrategyToApply] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { closeAgent } = useAgentPanel();
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -146,13 +148,22 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
     <Card className="h-full flex flex-col bg-gradient-card border-border/50 shadow-card">
       {/* Header */}
       <div className="p-4 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">
-            <Brain className="w-6 h-6 text-primary-foreground" />
+        <div className="flex items-center gap-3 justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">
+              <Brain className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Synapse Agent</h3>
+            </div>
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-foreground">Synapse Agent</h3>
-          </div>
+          <button
+            aria-label="Collapse Synapse Agent"
+            onClick={closeAgent}
+            className="inline-flex items-center justify-center rounded-md border border-border/50 text-foreground hover:bg-secondary px-2 py-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       </div>
 

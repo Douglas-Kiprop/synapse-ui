@@ -9,6 +9,7 @@ import StrategyBuilderPage from "./pages/StrategyBuilderPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import NotFound from "./pages/NotFound";
+import StrategiesPage from "./pages/StrategiesPage";
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,11 @@ const App = () => (
           <Route path="/settings" element={
             <MainLayout>
               <AnalyticsPage />
+            </MainLayout>
+          } />
+          <Route path="/strategies" element={
+            <MainLayout>
+              <StrategiesPage />
             </MainLayout>
           } />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

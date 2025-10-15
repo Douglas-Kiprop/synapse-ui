@@ -10,7 +10,8 @@ import {
   Zap,
   Activity,
   PieChart,
-  Target
+  Target,
+  Bot
 } from "lucide-react";
 import {
   Sidebar,
@@ -24,10 +25,12 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { useAgentPanel } from "@/contexts/AgentPanelContext";
 
 const navigationItems = [
   { title: "Dashboard", url: "/", icon: Home },
   { title: "Strategy Builder", url: "/strategy-builder", icon: Brain },
+  { title: "Strategies", url: "/strategies", icon: Target },
   { title: "Portfolio", url: "/portfolio", icon: PieChart },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Market Data", url: "/market-data", icon: TrendingUp },
@@ -45,6 +48,7 @@ export function AppSidebar() {
   const location = useLocation();
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
+  const { openAgent } = useAgentPanel();
 
   const isActive = (path: string) => currentPath === path;
   const isExpanded = navigationItems.some((i) => isActive(i.url)) || 
@@ -127,6 +131,24 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
+              {/* Synapse Agent opener */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => openAgent()}
+                  className={cn(
+                    "transition-all duration-200 group hover:bg-secondary text-foreground border border-transparent hover:text-foreground"
+                  )}
+                >
+                  <Bot className={cn(
+                    "transition-all duration-200",
+                    collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+                  )} />
+                  {!collapsed && (
+                    <span className="font-medium">Synapse Agent</span>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
               {toolsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
