@@ -49,18 +49,15 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hasStrategyToApply, setHasStrategyToApply] = useState(false);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { closeAgent } = useAgentPanel();
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
-    }
-  }, [messages]);
+    endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
 
   useEffect(() => {
-    // Check if current strategy can be applied
     setHasStrategyToApply(!!currentStrategy);
   }, [currentStrategy]);
 
@@ -168,7 +165,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
           {messages.map((message) => (
             <div
@@ -235,6 +232,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
               </div>
             </div>
           )}
+          <div ref={endOfMessagesRef} />
         </div>
       </ScrollArea>
 

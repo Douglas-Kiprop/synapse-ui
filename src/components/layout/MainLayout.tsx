@@ -5,6 +5,7 @@ import { ChatPanel } from "@/components/chat/ChatPanel";
 import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
 import { AgentPanelProvider, useAgentPanel } from "@/contexts/AgentPanelContext";
+import { AuthButton } from "@/components/auth/AuthButton";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -28,7 +29,6 @@ function LayoutBody({ children }: MainLayoutProps) {
       <div className="min-h-screen flex w-full bg-background">
         {/* Sidebar */}
         <AppSidebar />
-
         {/* Main Content Area */}
         <div className={cn("flex-1 flex flex-col", agentOpen ? "lg:mr-96" : "lg:mr-0")}>
           {/* Header */}
@@ -37,6 +37,7 @@ function LayoutBody({ children }: MainLayoutProps) {
               <Menu className="w-5 h-5" />
             </SidebarTrigger>
             <div className="flex-1" />
+            <AuthButton />
           </header>
 
           {/* Main Content */}
