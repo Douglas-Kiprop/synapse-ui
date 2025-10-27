@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Menu } from "lucide-react";
 import { AgentPanelProvider, useAgentPanel } from "@/contexts/AgentPanelContext";
 import { AuthButton } from "@/components/auth/AuthButton";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -65,8 +66,11 @@ function LayoutBody({ children }: MainLayoutProps) {
 
 export function MainLayout({ children }: MainLayoutProps) {
   return (
-    <AgentPanelProvider>
-      <LayoutBody>{children}</LayoutBody>
-    </AgentPanelProvider>
+    <RequireAuth>
+      {/* All app content is gated behind authentication */}
+      <AgentPanelProvider>
+        <LayoutBody>{children}</LayoutBody>
+      </AgentPanelProvider>
+    </RequireAuth>
   );
 }

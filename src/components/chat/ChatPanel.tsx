@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { StrategyBubble } from "./StrategyBubble";
 import { useAgentPanel } from "@/contexts/AgentPanelContext";
+import { useAuthFetch } from "@/hooks/useAuthFetch";
 
 interface Message {
   id: string;
@@ -52,6 +53,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { closeAgent } = useAgentPanel();
+  const { fetchWithAuth } = useAuthFetch();
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,7 +91,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
         return;
       }
 
-      const response = await fetch(backendUrl, {
+      const response = await fetchWithAuth(backendUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -105,11 +107,11 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
 
       const agentResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: data.response, // Assuming your backend sends a 'response' field
+        content: data.response,
         sender: "agent",
         timestamp: new Date(),
       };
-      
+
       setMessages(prev => [...prev, agentResponse]);
     } catch (error) {
       console.error("Error sending message to backend:", error);

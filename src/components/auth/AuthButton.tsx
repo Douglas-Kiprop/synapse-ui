@@ -6,10 +6,21 @@ export function AuthButton() {
 
   if (!ready) return null;
 
+  // Safely derive a displayable address string
+  const rawAddr =
+    typeof user?.wallet?.address === "string"
+      ? user.wallet.address
+      : (user?.wallet?.address as any)?.address;
+
+  const address =
+    typeof rawAddr === "string" ? rawAddr : undefined;
+
   const label = authenticated
-    ? (user?.wallet?.address
-        ? `${user.wallet.address.slice(0, 6)}…${user.wallet.address.slice(-4)}`
-        : user?.email ?? "Signed in")
+    ? (address
+        ? `${address.slice(0, 6)}…${address.slice(-4)}`
+        : typeof user?.email === "string"
+          ? user.email
+          : "Signed in")
     : "Sign in";
 
   return authenticated ? (
