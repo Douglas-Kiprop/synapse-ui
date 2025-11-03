@@ -24,6 +24,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useAgentPanel } from "@/contexts/AgentPanelContext";
 
@@ -58,9 +63,52 @@ export function AppSidebar() {
     cn(
       "transition-all duration-200 group",
       isActive 
-        ? "bg-gradient-primary text-primary-foreground shadow-glow border border-primary/20" 
+        ? "bg-gradient-primary text-primary-foreground border border-primary/20" 
         : "hover:bg-secondary text-foreground border border-transparent hover:text-foreground"
     );
+
+  const renderMenuItem = (item: { title: string; url: string; icon: any }) => (
+    <SidebarMenuItem key={item.title}>
+      <SidebarMenuButton asChild>
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <NavLink 
+                to={item.url} 
+                end 
+                className={getNavClassName}
+              >
+                <item.icon className={cn(
+                  "transition-all duration-200",
+                  collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+                )} />
+                {!collapsed && (
+                  <span className="font-medium">{item.title}</span>
+                )}
+              </NavLink>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{item.title}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <NavLink 
+            to={item.url} 
+            end 
+            className={getNavClassName}
+          >
+            <item.icon className={cn(
+              "transition-all duration-200",
+              collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+            )} />
+            {!collapsed && (
+              <span className="font-medium">{item.title}</span>
+            )}
+          </NavLink>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
 
   return (
     <Sidebar
@@ -74,7 +122,7 @@ export function AppSidebar() {
         {/* Logo/Brand */}
         <div className="mb-6 px-3 py-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
+            <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center">
               <Zap className="w-5 h-5 text-primary-foreground" />
             </div>
             {!collapsed && (
@@ -98,25 +146,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="space-y-1">
-              {navigationItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      end 
-                      className={getNavClassName}
-                    >
-                      <item.icon className={cn(
-                        "transition-all duration-200",
-                        collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
-                      )} />
-                      {!collapsed && (
-                        <span className="font-medium">{item.title}</span>
-                      )}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {navigationItems.map(renderMenuItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -139,35 +169,31 @@ export function AppSidebar() {
                     "transition-all duration-200 group hover:bg-secondary text-foreground border border-transparent hover:text-foreground"
                   )}
                 >
-                  <Bot className={cn(
-                    "transition-all duration-200",
-                    collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
-                  )} />
+                  {collapsed ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Bot className={cn(
+                          "transition-all duration-200",
+                          collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+                        )} />
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Synapse Agent</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Bot className={cn(
+                      "transition-all duration-200",
+                      collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+                    )} />
+                  )}
                   {!collapsed && (
                     <span className="font-medium">Synapse Agent</span>
                   )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
 
-              {toolsItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      end 
-                      className={getNavClassName}
-                    >
-                      <item.icon className={cn(
-                        "transition-all duration-200",
-                        collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
-                      )} />
-                      {!collapsed && (
-                        <span className="font-medium">{item.title}</span>
-                      )}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {toolsItems.map(renderMenuItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -177,18 +203,40 @@ export function AppSidebar() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild>
-                <NavLink 
-                  to="/settings" 
-                  className={getNavClassName}
-                >
-                  <Settings className={cn(
-                    "transition-all duration-200",
-                    collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
-                  )} />
-                  {!collapsed && (
-                    <span className="font-medium">Settings</span>
-                  )}
-                </NavLink>
+                {collapsed ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink 
+                        to="/settings" 
+                        className={getNavClassName}
+                      >
+                        <Settings className={cn(
+                          "transition-all duration-200",
+                          collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+                        )} />
+                        {!collapsed && (
+                          <span className="font-medium">Settings</span>
+                        )}
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Settings</p>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <NavLink 
+                    to="/settings" 
+                    className={getNavClassName}
+                  >
+                    <Settings className={cn(
+                      "transition-all duration-200",
+                      collapsed ? "w-5 h-5" : "w-4 h-4 mr-3"
+                    )} />
+                    {!collapsed && (
+                      <span className="font-medium">Settings</span>
+                    )}
+                  </NavLink>
+                )}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
