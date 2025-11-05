@@ -15,7 +15,7 @@ const GainersLosersPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`http://localhost:8000/market/gainers-losers?limit=15&timeframe=${selectedTimeframe}`);
+        const response = await fetch(`${import.meta.env.VITE_SYNAPSE_API_URL}/market/gainers-losers?limit=15&timeframe=${selectedTimeframe}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
