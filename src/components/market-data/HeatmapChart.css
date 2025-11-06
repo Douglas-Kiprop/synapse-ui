@@ -1,0 +1,25 @@
+.metric-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.metric-selector button {
+  background-color: #2a2a2a; /* Darker background for inactive */
+  color: #fff;
+  border: 1px solid #444; /* Slightly lighter border */
+  padding: 6px 12px; /* Reduced padding for a sleeker look */
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.metric-selector button:hover {
+  background-color: #8a2be2; /* Purple on hover */
+  border-color: #8a2be2; /* Purple border on hover */
+}
+
+.metric-selector button.active {
+  background-color: #8a2be2; /* Purple for active button */
+  border-color: #8a2be2; /* Purple border for active button */
+}

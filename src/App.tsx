@@ -11,6 +11,7 @@ import PortfolioPage from "./pages/PortfolioPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import MarketDataPage from "./pages/market-data/MarketDataPage";
 import GainersLosersPage from "./pages/market-data/GainersLosersPage";
+import HeatmapPage from "./pages/market-data/HeatmapPage";
 import NotFound from "./pages/NotFound";
 import StrategiesPage from "./pages/StrategiesPage";
 import { usePrivy } from "@privy-io/react-auth";
@@ -132,6 +133,11 @@ const App = () => {
             <Route path="/strategies" element={
               <MainLayout>
                 <StrategiesPage />
+              </MainLayout>
+            } />
+            <Route path="/market-data/heatmap" element={
+              <MainLayout>
+                <HeatmapPage />
               </MainLayout>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

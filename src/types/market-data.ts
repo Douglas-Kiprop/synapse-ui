@@ -5,7 +5,6 @@ export interface MarketItem {
   price_change?: number;
   percentage_change?: number;
   volume?: number;
-}
   current_price: number;
   timestamp: string;
 }
@@ -14,3 +13,11 @@ export interface GainersLosersResponse {
   gainers: MarketItem[];
   losers: MarketItem[];
 }
+
+export interface HeatmapItem {
+  symbol: string;
+  value: number;
+  percentage_change: number;
+}
+
+export type HeatmapResponse = HeatmapItem[];

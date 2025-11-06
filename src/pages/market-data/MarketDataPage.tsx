@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button"; // Assuming you have a Button component
+import HeatmapChart from '../../components/market-data/HeatmapChart';
 
 const MarketDataPage: React.FC = () => {
   return (
@@ -42,6 +43,19 @@ const MarketDataPage: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Heatmap Chart Overview */}
+        <Card className="col-span-7">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle>Market Heatmap</CardTitle>
+            <Link to="/market-data/heatmap">
+              <Button variant="outline">View Detailed Heatmap</Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <HeatmapChart />
+          </CardContent>
+        </Card>
+
         {/* Gainers & Losers Widget */}
         <Card className="col-span-7">
           <CardHeader>
@@ -58,7 +72,7 @@ const MarketDataPage: React.FC = () => {
         </Card>
 
         {/* Placeholder for other market data sections */}
-        <Card className="col-span-7">
+        {/* <Card className="col-span-7">
           <CardHeader>
             <CardTitle>Advanced Market Data coming soon...</CardTitle>
           </CardHeader>
@@ -67,7 +81,7 @@ const MarketDataPage: React.FC = () => {
               Comprehensive market data tools like Open Interest, Funding Rates, and Liquidation data will be available here.
             </p>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
     </div>
   );
