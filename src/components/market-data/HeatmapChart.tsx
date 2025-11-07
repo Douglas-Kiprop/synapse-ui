@@ -8,6 +8,49 @@ const HeatmapChart: React.FC = () => {
   const [heatmapData, setHeatmapData] = useState<HeatmapItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [maxAbsoluteValue, setMaxAbsoluteValue] = useState<number>(0); // State to store the max absolute value for dynamic coloring
+
+  const formatVolume = (value: number): string => {
+    if (value >= 1_000_000_000) {
+      return `${(value / 1_000_000_000).toFixed(2)}B`;
+    } else if (value >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(2)}M`;
+    } else if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(2)}K`;
+    } else {
+      return `${value.toFixed(2)}`;
+    }
+  };
+
+  const getColor = useCallback((value: number, percentageChange: number) => {
+    if (percentageChange === 0) {
+      return '#808080'; // Grey for no change
+    }
+
+    // Normalize the value to a 0-1 range based on the overall maxAbsoluteValue
+    const normalizedValue = maxAbsoluteValue > 0 ? Math.min(Math.abs(value) / maxAbsoluteValue, 1) : 0;
+
+    if (percentageChange < 0) {
+      // Red gradient: from dimmest red to brightest red
+      const dimmestRed = [188, 63, 68]; // #BC3F44
+      const brightestRed = [230, 49, 52]; // #E63134
+
+      const r = Math.round(dimmestRed[0] + (brightestRed[0] - dimmestRed[0]) * normalizedValue);
+      const g = Math.round(dimmestRed[1] + (brightestRed[1] - dimmestRed[1]) * normalizedValue);
+      const b = Math.round(dimmestRed[2] + (brightestRed[2] - dimmestRed[2]) * normalizedValue);
+      return `rgb(${r}, ${g}, ${b})`;
+
+    } else {
+      // Green gradient: from dimmest green to brightest green
+      const dimmestGreen = [47, 158, 79]; // #2F9E4F
+      const brightestGreen = [48, 204, 90]; // #30CC5A
+
+      const r = Math.round(dimmestGreen[0] + (brightestGreen[0] - dimmestGreen[0]) * normalizedValue);
+      const g = Math.round(dimmestGreen[1] + (brightestGreen[1] - dimmestGreen[1]) * normalizedValue);
+      const b = Math.round(dimmestGreen[2] + (brightestGreen[2] - dimmestGreen[2]) * normalizedValue);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  }, [maxAbsoluteValue]);
 
   useEffect(() => {
     const fetchHeatmapData = async () => {
@@ -20,7 +63,7 @@ const HeatmapChart: React.FC = () => {
         }
 
         const sortBy = selectedMetric === 'volume' ? 'volume' : 'price_change';
-        const apiUrl = `${import.meta.env.VITE_SYNAPSE_API_URL}/market/heatmap-data?sort_by=${sortBy}&limit=10`;
+        const apiUrl = `${import.meta.env.VITE_SYNAPSE_API_URL}/market/heatmap-data?sort_by=${sortBy}&limit=15`;
         
         const response = await fetch(apiUrl);
         if (!response.ok) {
@@ -37,6 +80,11 @@ const HeatmapChart: React.FC = () => {
           value: selectedMetric === 'volume' ? (item.total_volume ?? 0) : (item.price_change_percentage_24h ?? 0), // Default to 0 if undefined or null
         }));
         setHeatmapData(transformedData);
+
+        // Calculate max absolute value for dynamic coloring
+        const currentMaxAbsoluteValue = Math.max(...transformedData.map(item => Math.abs(item.value)));
+        setMaxAbsoluteValue(currentMaxAbsoluteValue);
+
       } catch (e: any) {
         setError(e.message);
       } finally {
@@ -73,38 +121,31 @@ const HeatmapChart: React.FC = () => {
             data={{
               id: 'root',
               children: heatmapData.map((item: any) => {
-                let color = '#808080'; // Default to grey
-                if (item.percentage_change < 0) {
-                  color = '#FF4560'; // Red
-                } else if (item.percentage_change > 0) {
-                  color = '#00E396'; // Green
-                }
                 return {
                   id: item.symbol,
                   value: Math.abs(item.value), // Ensure value is always positive for treemap sizing
                   percentageChange: item.percentage_change,
-                  color: color,
                 };
               }),
             }}
             identity="id"
             value="value"
-            colors={(node) => node.data.color}
+            colors={(node) => getColor(node.data.value, node.data.percentageChange)}
             margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
             labelSkipSize={20} // Increased to hide labels on smaller tiles
-            labelTextColor={{
-              from: 'color',
-              modifiers: [['brighter', 3]],
-            }}
-            parentLabelTextColor={{
-              from: 'color',
-              modifiers: [['brighter', 3]],
-            }}
+            labelTextColor="#ffffff" // Static white for better visibility
+            parentLabelTextColor="#ffffff" // Static white for better visibility
             borderColor="#000000"
             enableLabel={true}
             label={(node) => {
-              const displayPercentageChange = (node.data.percentageChange ?? 0).toFixed(2);
-              return `${node.data.id}\n${displayPercentageChange}%`;
+              const symbol = node.data.id.toUpperCase();
+              if (selectedMetric === 'volume') {
+                const formattedVolume = formatVolume(node.data.value ?? 0);
+                return `${symbol}\n${formattedVolume}`;
+              } else {
+                const displayPercentageChange = (node.data.percentageChange ?? 0).toFixed(2);
+                return `${symbol}\n${displayPercentageChange}%`;
+              }
             }}
             tooltip={({ node }) => (
               <div
@@ -115,8 +156,8 @@ const HeatmapChart: React.FC = () => {
                   color: 'black',
                 }}
               >
-                <strong>{node.data.id}</strong><br />
-                {selectedMetric === 'volume' ? 'Volume' : 'Chg%'}: {(node.data.value ?? 0).toFixed(2)}{selectedMetric === 'volume' ? 'B' : '%'}<br />
+                <strong>{node.data.id.toUpperCase()}</strong><br />
+                {selectedMetric === 'volume' ? 'Volume' : 'Chg%'}: {selectedMetric === 'volume' ? formatVolume(node.data.value ?? 0) : `${(node.data.value ?? 0).toFixed(2)}%`}<br />
                 Change: {(node.data.percentageChange ?? 0).toFixed(2)}%
               </div>
             )}
