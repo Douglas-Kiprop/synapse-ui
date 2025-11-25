@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Zap, CheckCircle, Brain, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ReactMarkdown from "react-markdown";
+import gfm from "remark-gfm";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -185,7 +187,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
               
               <div
                 className={cn(
-                  "max-w-[80%]",
+                  "max-w-[80%] break-all whitespace-pre-wrap w-fit",
                   message.sender === "user" ? "ml-auto" : ""
                 )}
               >
@@ -197,13 +199,17 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
                 ) : (
                   <div
                     className={cn(
-                      "p-3 rounded-lg",
+                      "p-3 rounded-lg prose prose-invert text-sm max-w-none", // Added prose classes here
                       message.sender === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary text-secondary-foreground"
                     )}
                   >
-                    <p className="text-sm">{message.content}</p>
+                    <ReactMarkdown
+                      remarkPlugins={[gfm]} // Removed className from here
+                    >
+                      {message.content}
+                    </ReactMarkdown>
                     <span className="text-xs opacity-70 mt-1 block">
                       {message.timestamp.toLocaleTimeString()}
                     </span>

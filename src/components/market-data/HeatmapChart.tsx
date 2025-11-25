@@ -130,7 +130,10 @@ const HeatmapChart: React.FC = () => {
             }}
             identity="id"
             value="value"
-            colors={(node) => getColor(node.data.value, node.data.percentageChange)}
+            colors={(node) => {
+              const pc = 'percentageChange' in node.data ? (node.data as any).percentageChange ?? 0 : 0;
+              return getColor((node.value as number) ?? 0, pc);
+            }}
             margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
             labelSkipSize={20} // Increased to hide labels on smaller tiles
             labelTextColor="#ffffff" // Static white for better visibility
@@ -139,11 +142,12 @@ const HeatmapChart: React.FC = () => {
             enableLabel={true}
             label={(node) => {
               const symbol = node.data.id.toUpperCase();
+              const pc = 'percentageChange' in node.data ? (node.data as any).percentageChange ?? 0 : 0;
               if (selectedMetric === 'volume') {
-                const formattedVolume = formatVolume(node.data.value ?? 0);
+                const formattedVolume = formatVolume((node.value as number) ?? 0);
                 return `${symbol}\n${formattedVolume}`;
               } else {
-                const displayPercentageChange = (node.data.percentageChange ?? 0).toFixed(2);
+                const displayPercentageChange = (pc as number).toFixed(2);
                 return `${symbol}\n${displayPercentageChange}%`;
               }
             }}
@@ -157,8 +161,16 @@ const HeatmapChart: React.FC = () => {
                 }}
               >
                 <strong>{node.data.id.toUpperCase()}</strong><br />
-                {selectedMetric === 'volume' ? 'Volume' : 'Chg%'}: {selectedMetric === 'volume' ? formatVolume(node.data.value ?? 0) : `${(node.data.value ?? 0).toFixed(2)}%`}<br />
-                Change: {(node.data.percentageChange ?? 0).toFixed(2)}%
+                {(() => {
+                  const pc = 'percentageChange' in node.data ? (node.data as any).percentageChange ?? 0 : 0;
+                  return selectedMetric === 'volume'
+                    ? `Volume: ${formatVolume((node.value as number) ?? 0)}`
+                    : `Chg%: ${(pc as number).toFixed(2)}%`;
+                })()}<br />
+                {(() => {
+                  const pc = 'percentageChange' in node.data ? (node.data as any).percentageChange ?? 0 : 0;
+                  return `Change: ${(pc as number).toFixed(2)}%`;
+                })()}
               </div>
             )}
           />
