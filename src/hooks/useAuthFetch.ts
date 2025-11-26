@@ -1,43 +1,87 @@
 import { usePrivy } from "@privy-io/react-auth";
+import { useEffect, useRef } from "react";
 
 type Base = "spoonCore" | "synapse";
 
 function resolveBase(base: Base) {
-  const spoonCore = import.meta.env.VITE_BACKEND_URL;       // e.g. http://127.0.0.1:8765/chat/
-  const synapse = import.meta.env.VITE_SYNAPSE_API_URL;     // e.g. http://localhost:8000
-  return base === "spoonCore" ? spoonCore : synapse;
+    const spoonCore = import.meta.env.VITE_BACKEND_URL;
+    const synapse = import.meta.env.VITE_SYNAPSE_API_URL;
+    return base === "spoonCore" ? spoonCore : synapse;
 }
 
 export function useAuthFetch() {
-  const { authenticated, getAccessToken } = usePrivy();
+    const { authenticated, getAccessToken } = usePrivy();
+    const sessionTokenRef = useRef<string | null>(null);
+    const lastPrivyTokenRef = useRef<string | null>(null);
 
-  const fetchWithAuth = async (
-    input: string | URL,
-    init?: RequestInit,
-    options?: { base?: Base; path?: string }
-  ) => {
-    let url: string;
+    useEffect(() => {
+        if (!authenticated) {
+            sessionTokenRef.current = null;
+            lastPrivyTokenRef.current = null;
+        }
+    }, [authenticated]);
 
-    if (options?.base) {
-      const baseUrl = resolveBase(options.base);
-      if (!baseUrl) throw new Error(`Base URL not configured for '${options.base}'`);
-      url = options.path
-        ? `${baseUrl.replace(/\/$/, "")}/${options.path.replace(/^\//, "")}`
-        : baseUrl;
-    } else {
-      url = typeof input === "string" ? input : input.toString();
-    }
+    const ensureSessionToken = async (baseUrl: string): Promise<string | null> => {
+        if (!authenticated) return null;
+        const privyToken = await getAccessToken();
+        if (!privyToken) return null;
 
-    const token = authenticated ? await getAccessToken() : undefined;
+        if (sessionTokenRef.current && lastPrivyTokenRef.current === privyToken) {
+            return sessionTokenRef.current;
+        }
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...(init?.headers as Record<string, string>),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        const verifyUrl = `${baseUrl.replace(/\/$/, "")}/auth/verify`;
+        const resp = await fetch(verifyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: privyToken }),
+        });
+        if (!resp.ok) throw new Error(`Auth verify failed: ${resp.status}`);
+
+        const data = await resp.json();
+        const sessionToken = data?.session_token as string | undefined;
+        if (!sessionToken) throw new Error("No session_token returned from auth/verify");
+
+        sessionTokenRef.current = sessionToken;
+        lastPrivyTokenRef.current = privyToken;
+        return sessionToken;
     };
 
-    return fetch(url, { ...init, headers });
-  };
+    const fetchWithAuth = async (
+        input: string | URL,
+        init?: RequestInit,
+        options?: { base?: Base; path?: string }
+    ) => {
+        let url: string;
+        if (options?.base) {
+            const baseUrl = resolveBase(options.base);
+            if (!baseUrl) throw new Error(`Base URL not configured for '${options.base}'`);
+            url = options.path
+                ? `${baseUrl.replace(/\/$/, "")}/${options.path.replace(/^\//, "")}`
+                : baseUrl;
+        } else {
+            url = typeof input === "string" ? input : input.toString();
+        }
 
-  return { fetchWithAuth };
+        const headers: Record<string, string> = {
+            ...(init?.headers as Record<string, string>),
+        };
+        if (init?.body && !headers["Content-Type"]) {
+            headers["Content-Type"] = "application/json";
+        }
+
+        if (options?.base === "synapse") {
+            const baseUrl = resolveBase("synapse");
+            const sessionToken = await ensureSessionToken(baseUrl);
+            if (sessionToken) headers["Authorization"] = `Bearer ${sessionToken}`;
+        } else {
+            const privyToken = authenticated ? await getAccessToken() : undefined;
+            if (privyToken) headers["Authorization"] = `Bearer ${privyToken}`;
+        }
+
+        const credentials = init?.credentials ?? "same-origin";
+        return fetch(url, { ...init, headers, credentials });
+    };
+
+    return { fetchWithAuth };
 }

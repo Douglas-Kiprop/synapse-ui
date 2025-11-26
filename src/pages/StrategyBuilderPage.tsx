@@ -1,4 +1,5 @@
-import { StrategyBuilder } from "@/components/strategy/StrategyBuilder";
+import StrategyBuilder from "@/components/strategy/StrategyBuilder";
+
 
 const StrategyBuilderPage = () => {
   return <StrategyBuilder />;

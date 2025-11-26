@@ -1,9 +1,11 @@
 import { ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { AuthButton } from "@/components/auth/AuthButton";
+import { useAuthFetch } from "@/hooks/useAuthFetch";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { ready, authenticated } = usePrivy();
+  const { fetchWithAuth } = useAuthFetch();
 
   if (!ready) {
     return (
