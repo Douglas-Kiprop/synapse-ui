@@ -1,23 +1,98 @@
-import React, { useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Slider } from "@/components/ui/slider";
-import { Plus, Trash2, TrendingUp, Target, DollarSign, AlertTriangle, Settings, Save, Share } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Plus, 
+  Trash2, 
+  TrendingUp, 
+  Settings, 
+  Save, 
+  Undo2, 
+  Redo2, 
+  GitBranch,
+  Activity,
+  ListTree,
+  Network
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useStrategyService } from "@/services/strategyService";
+import type { StrategyModel as ApiStrategyModel, LogicNodeGroup as ApiLogicNodeGroup } from "@/types/strategy";
 
-// -------------------- Types --------------------
+// --- React Flow Imports ---
+import ReactFlow, {
+  ReactFlowProvider,
+  Background,
+  Controls,
+  MiniMap,
+  Node,
+  Edge,
+  useNodesState,
+  useEdgesState,
+  BackgroundVariant,
+  Handle,
+  Position,
+} from "reactflow";
+import "reactflow/dist/style.css";
+
+// --- Recharts for Previews ---
+import {
+  LineChart,
+  Line,
+  ResponsiveContainer,
+} from "recharts";
+
+// ==========================================
+// 1. INTERNAL HISTORY HOOK
+// ==========================================
+
+function useHistory<T>(initialState: T) {
+  const [index, setIndex] = useState(0);
+  const [history, setHistory] = useState<T[]>([initialState]);
+
+  const state = useMemo(() => history[index], [history, index]);
+
+  const setState = useCallback((action: T | ((prev: T) => T)) => {
+    setHistory((prev) => {
+      const current = prev[index];
+      const next = typeof action === 'function' ? (action as Function)(current) : action;
+      if (JSON.stringify(current) === JSON.stringify(next)) return prev;
+      const newHistory = prev.slice(0, index + 1);
+      newHistory.push(next);
+      return newHistory;
+    });
+    setIndex((prev) => prev + 1);
+  }, [index]);
+
+  const undo = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
+  const redo = useCallback(() => setIndex((i) => Math.min(history.length - 1, i + 1)), [history]);
+
+  return { state, setState, undo, redo, canUndo: index > 0, canRedo: index < history.length - 1 };
+}
+
+// ==========================================
+// 2. TYPES & UTILITIES
+// ==========================================
 
 type UUID = string;
-
 type LogicOperator = "AND" | "OR";
-
 type ConditionType = "technical_indicator" | "price_alert" | "volume_alert" | "wallet_inflow" | "custom";
 
 interface BaseCondition {
@@ -33,56 +108,268 @@ interface LogicNodeRef {
 }
 
 interface LogicNodeGroup {
+  id?: UUID;
   operator: LogicOperator;
   conditions: Array<LogicNodeRef | LogicNodeGroup>;
 }
 
 interface StrategyModel {
-  id: UUID;
+  id?: UUID;
   name: string;
   description?: string;
-  schedule: string; // "1m", "5m", "1h", etc
+  schedule: string;
   assets: string[];
   notification_preferences?: Record<string, any>;
-  conditions: BaseCondition[]; // flattened canonical conditions
+  conditions: BaseCondition[];
   logic_tree: LogicNodeGroup;
-  // extra fields like status/risk can be added as metadata
 }
 
-// -------------------- Utilities --------------------
+// React Flow Data Types
+interface ConditionNodeData {
+  condition: BaseCondition;
+  onUpdate: (c: BaseCondition) => void;
+  onRemove: (id: UUID) => void;
+}
+
+interface GroupNodeData {
+  group: LogicNodeGroup;
+  onUpdate: (g: LogicNodeGroup) => void;
+  onRemove: () => void;
+  onAddCondition: (groupId: UUID) => void;
+  onAddGroup: (groupId: UUID) => void;
+}
 
 const uid = (): UUID => {
-  // fallback for older browsers if crypto.randomUUID is unavailable
   if (typeof crypto !== "undefined" && (crypto as any).randomUUID) {
     return (crypto as any).randomUUID();
   }
   return "id-" + Math.random().toString(36).slice(2, 9);
 };
 
-// -------------------- Primitive editors --------------------
+const ensureGroupHasId = (group: any): LogicNodeGroup => {
+  if (!group.id) {
+    return { id: uid(), operator: group.operator || "AND", conditions: group.conditions || [] };
+  }
+  return group as LogicNodeGroup;
+};
 
-function ConditionEditor({
-  condition,
-  onChange,
-  onRemove,
-}: {
-  condition: BaseCondition;
-  onChange: (c: BaseCondition) => void;
-  onRemove: (id: UUID) => void;
-}) {
-  const indicators = ["rsi", "macd", "ema", "sma", "bollinger", "volume", "price_change"];
+// Normalize: ensure every group in the tree has a stable id
+const normalizeLogicTree = (node: any): LogicNodeGroup => {
+  const g = ensureGroupHasId(node);
+  return {
+    id: g.id!,
+    operator: g.operator || "AND",
+    conditions: (g.conditions || []).map((child: any) =>
+      "ref" in child ? child : normalizeLogicTree(child)
+    ),
+  };
+};
+const getPreviewData = (condition: BaseCondition) => {
+  const base = condition.type === "technical_indicator" ? 30 : 50000;
+  return Array.from({ length: 10 }).map((_, i) => ({
+    time: i,
+    value: base + Math.sin(i) * (base * 0.1) + Math.random() * (base * 0.05)
+  }));
+};
+
+const getPreviewSummary = (condition: BaseCondition) => {
+  const p = condition.payload || {};
+  switch (condition.type) {
+    case "technical_indicator": return `${p.indicator?.toUpperCase() || 'RSI'} ${p.operator || '<'} ${p.value || 30}`;
+    case "price_alert": return `${p.asset || 'Asset'} ${p.direction || 'crosses'} ${p.target_price || '0'}`;
+    case "volume_alert": return `Volume > ${p.threshold || 0}`;
+    default: return "Custom Condition";
+  }
+};
+
+// ==========================================
+// 3. VISUAL MODE: CUSTOM NODES
+// ==========================================
+
+const ConditionNode: React.FC<{ data: ConditionNodeData; selected?: boolean }> = ({ data, selected }) => {
+  const [editing, setEditing] = useState(false);
+  const { condition, onRemove, onUpdate } = data;
+
   return (
-    <div className="p-3 border rounded-md bg-background/20 space-y-2">
-      <div className="flex items-center justify-between">
+    <div className={cn("relative w-[280px] rounded-xl border-2 bg-card shadow-xl transition-all", selected ? "border-blue-500 ring-4 ring-blue-500/20" : "border-border/60")}>
+      <Handle type="target" position={Position.Top} className="!bg-blue-500 !w-4 !h-4" />
+      <div className="flex items-center justify-between p-3 border-b bg-muted/30 rounded-t-xl">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-blue-500" />
+          <span className="font-semibold text-xs uppercase tracking-wider text-muted-foreground">{condition.type.replace(/_/g, ' ')}</span>
+        </div>
+        <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive" onClick={() => onRemove(condition.id)}><Trash2 className="w-3 h-3" /></Button>
+      </div>
+      <div className="p-3 space-y-3">
+        <div className="flex justify-between items-center">
+            <Badge variant="outline" className="text-[10px] font-mono bg-background">ID: {condition.id.slice(0,4)}</Badge>
+            <span className="text-xs font-medium truncate max-w-[150px]">{getPreviewSummary(condition)}</span>
+        </div>
+        <div className="h-16 w-full bg-background/50 rounded-md border overflow-hidden">
+           <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={getPreviewData(condition)}>
+                <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={false} />
+              </LineChart>
+           </ResponsiveContainer>
+        </div>
+        {editing ? (
+             <div className="space-y-2 pt-1 border-t">
+                <Input value={condition.label || ""} placeholder="Label" onChange={(e) => onUpdate({...condition, label: e.target.value})} className="h-7 text-xs" />
+                <Button size="sm" variant="secondary" className="w-full h-6 text-xs" onClick={() => setEditing(false)}>Done</Button>
+             </div>
+        ) : (
+            <Button size="sm" variant="outline" className="w-full h-7 text-xs bg-background/50" onClick={() => setEditing(true)}>Edit Parameters</Button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const GroupNode: React.FC<{ data: GroupNodeData; selected?: boolean }> = ({ data, selected }) => {
+  const { group, onRemove, onUpdate, onAddCondition, onAddGroup } = data;
+  return (
+    <div className={cn("relative min-w-[200px] rounded-xl border-2 bg-card shadow-lg transition-all", selected ? "border-purple-500 ring-4 ring-purple-500/20" : "border-border/60")}>
+       <Handle type="target" position={Position.Top} className="!bg-purple-500 !w-4 !h-4" />
+       <div className={cn("p-2 rounded-t-lg flex justify-between items-center border-b", group.operator === "AND" ? "bg-green-500/10" : "bg-blue-500/10")}>
+            <div className="flex items-center gap-2">
+                <GitBranch className="w-4 h-4 text-foreground/70" />
+                <Select value={group.operator} onValueChange={(v) => onUpdate({...group, operator: v as LogicOperator})}>
+                    <SelectTrigger className="h-7 w-[80px] text-xs font-bold bg-background shadow-sm border-border/50"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="AND">AND</SelectItem><SelectItem value="OR">OR</SelectItem></SelectContent>
+                </Select>
+            </div>
+            <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive" onClick={onRemove}><Trash2 className="w-3 h-3" /></Button>
+       </div>
+       <div className="p-2 flex gap-1 bg-muted/20 rounded-b-lg">
+            <Button variant="secondary" size="sm" className="flex-1 h-7 text-xs shadow-sm bg-background hover:bg-background/80" onClick={() => onAddCondition(group.id)}><Plus className="w-3 h-3 mr-1" /> Cond</Button>
+            <Button variant="secondary" size="sm" className="flex-1 h-7 text-xs shadow-sm bg-background hover:bg-background/80" onClick={() => onAddGroup(group.id)}><Plus className="w-3 h-3 mr-1" /> Group</Button>
+       </div>
+       <Handle type="source" position={Position.Bottom} className="!bg-purple-500 !w-4 !h-4" />
+    </div>
+  );
+};
+
+const nodeTypes = { condition: ConditionNode, group: GroupNode };
+
+// ==========================================
+// 4. VISUAL MODE: FLOW ENGINE
+// ==========================================
+
+function LogicTreeFlow({
+  conditions, logicTree, onConditionsChange, onLogicTreeChange, onAddConditionToGroup, onAddGroupToGroup
+}: any) {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  const buildFlow = useCallback(() => {
+    const newNodes: Node[] = [];
+    const newEdges: Edge[] = [];
+    const visitedNodes = new Set<string>(); // Fix: Track visited nodes to prevent duplicate keys
+    const visitedEdges = new Set<string>(); // Fix: Track visited edges
+    let xCounter = 0;
+
+    const traverse = (node: LogicNodeGroup | LogicNodeRef, parentId: string | null, depth: number) => {
+      const isRef = "ref" in node;
+      const id = isRef ? (node as LogicNodeRef).ref : (node as LogicNodeGroup).id; // Access ID directly but safely
+      
+      // Safety check for missing ID
+      if (!id) return;
+
+      // Fix: If we have already added this node to the visual graph, skip it.
+      // This prevents the "Encountered two children with the same key" error if data has duplicates.
+      if (visitedNodes.has(id)) return;
+      visitedNodes.add(id);
+
+      const positionX = xCounter * 320;
+      const positionY = depth * 180;
+
+      if (isRef) {
+        const cond = conditions.find((c: any) => c.id === id);
+        if (cond) {
+            newNodes.push({
+                id: cond.id, type: 'condition', position: { x: positionX, y: positionY },
+                data: {
+                    condition: cond,
+                    onUpdate: (u: BaseCondition) => onConditionsChange(conditions.map((c: any) => c.id === u.id ? u : c)),
+                    onRemove: (rid: string) => {
+                        onConditionsChange(conditions.filter((c: any) => c.id !== rid));
+                        onLogicTreeChange(removeRefFromTree(logicTree, rid));
+                    }
+                }
+            });
+            xCounter++;
+        }
+      } else {
+        const group = ensureGroupHasId(node as LogicNodeGroup);
+        const currentX = positionX;
+        
+        newNodes.push({
+            id: group.id!, type: 'group', position: { x: currentX, y: positionY },
+            data: {
+                group,
+                onUpdate: (g: LogicNodeGroup) => onLogicTreeChange(updateGroupInTree(logicTree, g)),
+                onRemove: () => parentId ? onLogicTreeChange(removeGroupFromTree(logicTree, group.id!)) : onLogicTreeChange({ ...group, conditions: [] }),
+                onAddCondition: onAddConditionToGroup,
+                onAddGroup: onAddGroupToGroup
+            }
+        });
+
+        if (parentId) {
+             const edgeId = `${parentId}-${group.id}`;
+             if (!visitedEdges.has(edgeId)) {
+                newEdges.push({ id: edgeId, source: parentId, target: group.id!, type: 'smoothstep', style: { stroke: '#94a3b8', strokeWidth: 2 } });
+                visitedEdges.add(edgeId);
+             }
+        }
+
+        if (group.conditions && group.conditions.length > 0) {
+            group.conditions.forEach((child) => {
+                const childId = "ref" in child ? child.ref : (child as LogicNodeGroup).id;
+                if(childId) {
+                    const edgeId = `${group.id}-${childId}`;
+                    if(!visitedEdges.has(edgeId)) {
+                        newEdges.push({ id: edgeId, source: group.id!, target: childId, type: 'default', style: { stroke: '#94a3b8', strokeWidth: 2 } });
+                        visitedEdges.add(edgeId);
+                    }
+                    traverse(child, group.id!, depth + 1);
+                }
+            });
+        } else {
+             xCounter++;
+        }
+      }
+    };
+
+    traverse(logicTree, null, 0);
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, [conditions, logicTree, setNodes, setEdges, onConditionsChange, onLogicTreeChange]);
+
+  useEffect(() => { buildFlow(); }, [buildFlow]);
+
+  return (
+    <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} nodeTypes={nodeTypes} fitView attributionPosition="bottom-right" defaultEdgeOptions={{ type: 'smoothstep', animated: true }}>
+      <Background color="#94a3b8" gap={20} size={1} variant={BackgroundVariant.Dots} />
+      <Controls />
+      <MiniMap style={{ height: 100 }} zoomable pannable />
+    </ReactFlow>
+  );
+}
+
+// ==========================================
+// 5. SIMPLE MODE: RECURSIVE LIST & EDITOR
+// ==========================================
+
+const ConditionEditor = ({ condition, onChange, onRemove }: { condition: BaseCondition; onChange: (c: BaseCondition) => void; onRemove: (id: UUID) => void; }) => {
+  const indicators = ["rsi", "macd", "ema", "sma", "bollinger", "volume", "price_change"];
+  
+  return (
+    <div className="p-4 border rounded-xl bg-card hover:border-primary/30 transition-colors shadow-sm">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex gap-2 items-center">
-          <Label className="text-sm">Type</Label>
-          <Select
-            value={condition.type}
-            onValueChange={(v: any) => onChange({ ...condition, type: v as ConditionType })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+          <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">{condition.type.replace(/_/g, ' ').toUpperCase()}</Badge>
+          <Select value={condition.type} onValueChange={(v: any) => onChange({ ...condition, type: v as ConditionType })}>
+            <SelectTrigger className="h-7 w-[160px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="technical_indicator">Technical Indicator</SelectItem>
               <SelectItem value="price_alert">Price Alert</SelectItem>
@@ -92,549 +379,370 @@ function ConditionEditor({
             </SelectContent>
           </Select>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => onRemove(condition.id)}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
+        <Button variant="ghost" size="sm" onClick={() => onRemove(condition.id)} className="h-7 w-7 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
       </div>
 
-      {/* label */}
-      <div>
-        <Label className="text-sm">Label (optional)</Label>
-        <Input
-          value={condition.label ?? ""}
-          onChange={(e) => onChange({ ...condition, label: e.target.value })}
-        />
-      </div>
-
-      {/* payload editor per type (minimal examples) */}
-      {condition.type === "technical_indicator" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <div>
-            <Label>Indicator</Label>
-            <Select
-              value={condition.payload.indicator ?? "rsi"}
-              onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, indicator: v } })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {indicators.map((i) => <SelectItem key={i} value={i}>{i.toUpperCase()}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Operator</Label>
-            <Select
-              value={condition.payload.operator ?? "lt"}
-              onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, operator: v } })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lt">Less than (&lt;)</SelectItem>
-                <SelectItem value="gt">Greater than (&gt;)</SelectItem>
-                <SelectItem value="cross_above">Cross Above</SelectItem>
-                <SelectItem value="cross_below">Cross Below</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Value</Label>
-            <Input
-              type="number"
-              value={(condition.payload.value ?? "") as any}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })}
-            />
-          </div>
-        </div>
-      )}
-
-      {condition.type === "price_alert" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <div>
-            <Label>Asset</Label>
-            <Input
-              value={condition.payload.asset ?? "BTC"}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, asset: e.target.value } })}
-            />
-          </div>
-          <div>
-            <Label>Direction</Label>
-            <Select
-              value={condition.payload.direction ?? "below"}
-              onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, direction: v } })}
-            >
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="below">Below</SelectItem>
-                <SelectItem value="above">Above</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Target Price</Label>
-            <Input
-              type="number"
-              value={(condition.payload.target_price ?? "") as any}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, target_price: parseFloat(e.target.value) || 0 } })}
-            />
-          </div>
-        </div>
-      )}
-
-      {condition.type === "volume_alert" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <div>
-            <Label>Asset</Label>
-            <Input
-              value={condition.payload.asset ?? "BTC"}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, asset: e.target.value } })}
-            />
-          </div>
-          <div>
-            <Label>Threshold</Label>
-            <Input
-              type="number"
-              value={(condition.payload.threshold ?? "") as any}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, threshold: parseFloat(e.target.value) || 0 } })}
-            />
-          </div>
-        </div>
-      )}
-
-      {condition.type === "wallet_inflow" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          <div>
-            <Label>Wallet Address</Label>
-            <Input
-              value={condition.payload.address ?? ""}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, address: e.target.value } })}
-            />
-          </div>
-          <div>
-            <Label>Min Amount</Label>
-            <Input
-              type="number"
-              value={(condition.payload.min_amount ?? "") as any}
-              onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, min_amount: parseFloat(e.target.value) || 0 } })}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* custom generic editor */}
-      {condition.type === "custom" && (
+      <div className="grid gap-4">
         <div>
-          <Label>JSON Payload</Label>
-          <Textarea
-            value={JSON.stringify(condition.payload ?? {}, null, 2)}
-            onChange={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value);
-                onChange({ ...condition, payload: parsed });
-              } catch {
-                // ignore parse errors for now
-              }
-            }}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// -------------------- Recursive Group UI --------------------
-
-function GroupBlock({
-  node,
-  conditionsMap,
-  onAddConditionToGroup,
-  onAddGroupToGroup,
-  onUpdateGroup,
-  onRemoveGroup,
-  onUpdateCondition,
-  onRemoveCondition,
-}: {
-  node: LogicNodeGroup;
-  conditionsMap: Record<UUID, BaseCondition>;
-  onAddConditionToGroup: (group: LogicNodeGroup) => void;
-  onAddGroupToGroup: (group: LogicNodeGroup) => void;
-  onUpdateGroup: (group: LogicNodeGroup) => void;
-  onRemoveGroup: () => void;
-  onUpdateCondition: (condition: BaseCondition) => void;
-  onRemoveCondition: (id: UUID) => void;
-}) {
-  return (
-    <div className="border rounded-lg p-4 bg-background/10">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm">Group</Label>
-          <Select
-            value={node.operator}
-            onValueChange={(v: any) => onUpdateGroup({ ...node, operator: v })}
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="AND">AND</SelectItem>
-              <SelectItem value="OR">OR</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label className="text-xs text-muted-foreground mb-1 block">Label (Optional)</Label>
+          <Input value={condition.label ?? ""} onChange={(e) => onChange({ ...condition, label: e.target.value })} className="h-8" placeholder="e.g. RSI Dip Condition" />
         </div>
 
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => onAddConditionToGroup(node)}>
-            <Plus className="w-4 h-4 mr-2" /> Add Condition
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => onAddGroupToGroup(node)}>
-            <Plus className="w-4 h-4 mr-2" /> Add Group
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onRemoveGroup}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {node.conditions.map((item, idx) => {
-          const isRef = (it: any): it is LogicNodeRef => "ref" in it;
-          if (isRef(item)) {
-            const cond = conditionsMap[item.ref];
-            if (!cond) {
-              return <div key={idx} className="p-3 bg-red-50 rounded">Missing condition {String(item.ref)}</div>;
-            }
-            return (
-              <ConditionEditor
-                key={cond.id}
-                condition={cond}
-                onChange={onUpdateCondition}
-                onRemove={onRemoveCondition}
-              />
-            );
-          } else {
-            // nested group
-            return (
-              <div key={idx} className="pl-4">
-                <GroupBlock
-                  node={item}
-                  conditionsMap={conditionsMap}
-                  onAddConditionToGroup={onAddConditionToGroup}
-                  onAddGroupToGroup={onAddGroupToGroup}
-                  onUpdateGroup={(g) => {
-                    const newConditions = [...node.conditions];
-                    newConditions[idx] = g;
-                    onUpdateGroup({ ...node, conditions: newConditions });
-                  }}
-                  onRemoveGroup={() => {
-                    const newConditions = node.conditions.filter((_, i) => i !== idx);
-                    onUpdateGroup({ ...node, conditions: newConditions });
-                  }}
-                  onUpdateCondition={onUpdateCondition}
-                  onRemoveCondition={onRemoveCondition}
-                />
-              </div>
-            );
-          }
-        })}
+        {condition.type === "technical_indicator" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Indicator</Label>
+              <Select value={condition.payload.indicator ?? "rsi"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, indicator: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>{indicators.map((i) => <SelectItem key={i} value={i}>{i.toUpperCase()}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Operator</Label>
+              <Select value={condition.payload.operator ?? "lt"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, operator: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lt">Less than (&lt;)</SelectItem>
+                  <SelectItem value="gt">Greater than (&gt;)</SelectItem>
+                  <SelectItem value="cross_above">Cross Above</SelectItem>
+                  <SelectItem value="cross_below">Cross Below</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Value</Label>
+              <Input type="number" value={condition.payload.value ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })} className="h-9" />
+            </div>
+          </div>
+        )}
+        
+        {condition.type !== "technical_indicator" && (
+             <div className="p-3 bg-muted/20 rounded-md text-sm text-muted-foreground border border-dashed text-center">
+                 Configure {condition.type.replace(/_/g, ' ')} parameters here.
+             </div>
+        )}
       </div>
     </div>
   );
-}
+};
 
-// -------------------- Main Component --------------------
+const SimpleLogicTree = ({ node, conditions, depth = 0, onUpdateGroup, onRemoveGroup, onAddCondition, onAddGroup, onUpdateCondition, onRemoveCondition }: any) => {
+    if ("ref" in node) {
+        const cond = conditions.find((c: any) => c.id === node.ref);
+        if (!cond) return <div className="p-2 text-red-500 text-xs border rounded bg-red-50">Missing Condition</div>;
+        return <div className="ml-6"><ConditionEditor condition={cond} onChange={onUpdateCondition} onRemove={onRemoveCondition} /></div>;
+    }
+
+    const group = ensureGroupHasId(node) as LogicNodeGroup;
+    const isRoot = depth === 0;
+
+    return (
+        <div className={cn("flex flex-col gap-4 p-4 rounded-xl border-l-4 transition-all", isRoot ? "bg-slate-50/50 border-l-slate-400" : "ml-6 mt-4 bg-white border border-slate-200 shadow-sm", group.operator === "AND" ? "border-l-green-500" : "border-l-purple-500")}>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Badge variant="outline" className={cn("text-xs font-bold px-2 py-1", group.operator === "AND" ? "bg-green-100 text-green-700 border-green-200" : "bg-purple-100 text-purple-700 border-purple-200")}>
+                        {group.operator} GROUP
+                    </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Select value={group.operator} onValueChange={(v: any) => onUpdateGroup({...group, operator: v})}>
+                        <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="AND">AND (All)</SelectItem><SelectItem value="OR">OR (Any)</SelectItem></SelectContent>
+                    </Select>
+                    {!isRoot && <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-destructive/10 hover:text-destructive" onClick={() => onRemoveGroup(group.id)}><Trash2 className="w-4 h-4" /></Button>}
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+                {group.conditions.length === 0 && <div className="text-xs text-center py-6 text-muted-foreground border-2 border-dashed rounded-lg bg-muted/20">Empty group. Add conditions or subgroups below.</div>}
+                {group.conditions.map((child: any, idx: number) => (
+                    <SimpleLogicTree 
+                        key={idx} node={child} conditions={conditions} depth={depth + 1}
+                        onUpdateGroup={(g: any) => {
+                             const newConditions = [...group.conditions];
+                             newConditions[idx] = g;
+                             onUpdateGroup({...group, conditions: newConditions});
+                        }}
+                        onRemoveGroup={(id: any) => {
+                             const newConditions = group.conditions.filter((_, i) => i !== idx);
+                             onUpdateGroup({...group, conditions: newConditions});
+                        }}
+                        onAddCondition={onAddCondition} onAddGroup={onAddGroup} onUpdateCondition={onUpdateCondition} onRemoveCondition={onRemoveCondition}
+                    />
+                ))}
+            </div>
+
+            <div className="flex gap-3 pt-2">
+                <Button size="sm" variant="outline" className="text-xs flex-1 border-dashed h-9 bg-background/50 hover:bg-background" onClick={() => onAddCondition(group.id)}><Plus className="w-3 h-3 mr-2 text-blue-500" /> Add Condition</Button>
+                <Button size="sm" variant="outline" className="text-xs flex-1 border-dashed h-9 bg-background/50 hover:bg-background" onClick={() => onAddGroup(group.id)}><GitBranch className="w-3 h-3 mr-2 text-purple-500" /> Add Logic Group</Button>
+            </div>
+        </div>
+    );
+};
+
+// ==========================================
+// 6. LOGIC HELPERS
+// ==========================================
+
+const updateGroupInTree = (root: LogicNodeGroup, updated: LogicNodeGroup): LogicNodeGroup => {
+    if (root.id === updated.id) return updated;
+    return {
+        ...root,
+        conditions: root.conditions.map(c => {
+            if ("ref" in c) return c;
+            return updateGroupInTree(c as LogicNodeGroup, updated);
+        })
+    };
+};
+
+const removeGroupFromTree = (root: LogicNodeGroup, targetId: UUID): LogicNodeGroup => {
+    return {
+        ...root,
+        conditions: root.conditions.filter(c => {
+            if ("ref" in c) return true;
+            return (c as LogicNodeGroup).id !== targetId;
+        }).map(c => {
+             if ("ref" in c) return c;
+             return removeGroupFromTree(c as LogicNodeGroup, targetId);
+        })
+    };
+};
+
+const removeRefFromTree = (node: LogicNodeGroup, refId: UUID): LogicNodeGroup => {
+  const newNode: LogicNodeGroup = { id: node.id || uid(), operator: node.operator, conditions: [] };
+  if (!node.conditions) return newNode;
+  node.conditions.forEach((it) => {
+    if ("ref" in it) { if (it.ref !== refId) newNode.conditions.push(it); } 
+    else { const child = removeRefFromTree(it as LogicNodeGroup, refId); if(child.conditions.length > 0) newNode.conditions.push(child); }
+  });
+  return newNode;
+};
+
+// ==========================================
+// 7. MAIN COMPONENT
+// ==========================================
 
 interface AdvancedStrategyBuilderProps {
-  initial?: Partial<StrategyModel>;
-  onSave?: (payload: StrategyModel) => void;
+  initial?: Partial<ApiStrategyModel>;
+  onSave?: (payload: ApiStrategyModel) => void;
 }
 
 export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStrategyBuilderProps) {
   const { toast } = useToast();
   const { createStrategy, updateStrategy } = useStrategyService();
   const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<"visual" | "simple">("visual");
 
-  // Build initial state using provided initial or defaults
+  // -- State --
+  const initialConditions = useMemo(() => (initial?.conditions ?? []) as BaseCondition[], [initial]);
+  const initialLogicTree = useMemo(() => {
+    const tree = (initial?.logic_tree as LogicNodeGroup) ?? { operator: "AND", conditions: [] };
+    return normalizeLogicTree(tree);
+  }, [initial]);
+
+  const { state: conditions, setState: setConditions, undo: undoConditions, redo: redoConditions, canUndo, canRedo } = useHistory(initialConditions);
+  const { state: logicTree, setState: setLogicTree, undo: undoTree, redo: redoTree } = useHistory(initialLogicTree);
+
+  // -- Metadata --
   const [name, setName] = useState(initial?.name ?? "New Strategy");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [schedule, setSchedule] = useState(initial?.schedule ?? "1m");
   const [assets, setAssets] = useState<string[]>(initial?.assets ?? []);
-  const [conditions, setConditions] = useState<BaseCondition[]>(
-    (initial?.conditions ?? []) as BaseCondition[]
-  );
-  const [logicTree, setLogicTree] = useState<LogicNodeGroup>(
-    (initial?.logic_tree as LogicNodeGroup) ?? { operator: "AND", conditions: [] }
-  );
+  
+  const addAsset = (a: string) => { if(!assets.includes(a)) setAssets([...assets, a]); };
+  const removeAsset = (a: string) => setAssets(assets.filter(x => x !== a));
 
-  // helper map for quick lookup
-  const conditionsMap = Object.fromEntries(conditions.map((c) => [c.id, c])) as Record<UUID, BaseCondition>;
-
-  // Assets list
-  const assetChoices = ["BTC", "ETH", "SOL", "AVAX", "MATIC", "ADA", "DOT", "LINK", "UNI", "AAVE"];
-
-  const addAsset = (a: string) => setAssets((s) => (s.includes(a) ? s : [...s, a]));
-  const removeAsset = (a: string) => setAssets((s) => s.filter((x) => x !== a));
-
-  // condition helpers
+  // -- Logic Actions --
   const createEmptyCondition = (type: ConditionType = "technical_indicator"): BaseCondition => ({
-    id: uid(),
-    type,
-    label: "",
-    enabled: true,
-    payload:
-      type === "technical_indicator"
-        ? { indicator: "rsi", params: { period: 14 }, operator: "lt", value: 30, asset: "BTC", timeframe: "1h" }
-        : type === "price_alert"
-        ? { asset: "BTC", direction: "below", target_price: 60000 }
-        : type === "volume_alert"
-        ? { asset: "BTC", threshold: 100000000 }
-        : {},
+    id: uid(), type, label: "", enabled: true,
+    payload: type === "technical_indicator" ? { indicator: "rsi", params: { period: 14 }, operator: "lt", value: 30, asset: "BTC", timeframe: "1h" } : {},
   });
 
-  const addCondition = (type: ConditionType = "technical_indicator") => {
-    const c = createEmptyCondition(type);
-    setConditions((s) => [...s, c]);
-    return c;
-  };
-
-  // Add condition to a given group by inserting a { ref: id } node
-  const addConditionToGroup = (group: LogicNodeGroup, type: ConditionType = "technical_indicator") => {
-    const c = addCondition(type);
-    // mutate tree: find group instance and push ref
-    const newTree = structuredClone(logicTree) as LogicNodeGroup;
-    const pushed = pushRefToGroupNode(newTree, group, { ref: c.id });
-    if (!pushed) {
-      // fallback: push to root
-      newTree.conditions.push({ ref: c.id });
-    }
-    setLogicTree(newTree);
-  };
-
-  const pushRefToGroupNode = (root: LogicNodeGroup, target: LogicNodeGroup, refNode: LogicNodeRef): boolean => {
-    // compare by operator/content structure (no stable id on group), so use shallow object equality
-    if (root === target) {
-      root.conditions.push(refNode);
-      return true;
-    }
-    for (let i = 0; i < root.conditions.length; i++) {
-      const it = root.conditions[i];
-      if (!("ref" in it)) {
-        if (pushRefToGroupNode(it as LogicNodeGroup, target, refNode)) return true;
-      }
-    }
-    return false;
-  };
-
-  const addGroupToGroup = (group: LogicNodeGroup) => {
-    const newGroup: LogicNodeGroup = { operator: "AND", conditions: [] };
-    const newTree = structuredClone(logicTree) as LogicNodeGroup;
-    const pushed = pushRefToGroupNode(newTree, group, newGroup as any);
-    if (!pushed) {
-      newTree.conditions.push(newGroup as any);
-    }
-    setLogicTree(newTree);
-  };
-
-  const removeCondition = (id: UUID) => {
-    setConditions((s) => s.filter((c) => c.id !== id));
-    // remove refs from logic_tree
-    const newTree = removeRefFromTree(logicTree, id);
-    setLogicTree(newTree);
-  };
-
-  const removeRefFromTree = (node: LogicNodeGroup, refId: UUID): LogicNodeGroup => {
-    const newNode: LogicNodeGroup = { operator: node.operator, conditions: [] };
-    node.conditions.forEach((it) => {
-      if ("ref" in it) {
-        if (it.ref !== refId) newNode.conditions.push(it);
-      } else {
-        const child = removeRefFromTree(it as LogicNodeGroup, refId);
-        // Only push child if it still contains conditions
-        if ((child.conditions?.length ?? 0) > 0) newNode.conditions.push(child);
-      }
+  const addConditionToGroup = (targetId: UUID) => {
+    const newCondition = createEmptyCondition();
+    setConditions((prev) => [...prev, newCondition]);
+    setLogicTree((prev) => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      const addToGroup = (node: LogicNodeGroup): boolean => {
+        if (node.id === targetId) { node.conditions.push({ ref: newCondition.id }); return true; }
+        for (const child of node.conditions) { 
+          if (!("ref" in child)) { 
+            if (addToGroup(child as LogicNodeGroup)) return true; 
+          } 
+        }
+        return false;
+      };
+      addToGroup(cloned);
+      return ensureGroupHasId(cloned);
     });
-    return newNode;
   };
 
-  const updateCondition = (updated: BaseCondition) => {
-    setConditions((s) => s.map((c) => (c.id === updated.id ? updated : c)));
+  const addGroupToGroup = (targetId: UUID) => {
+    const newGroup: LogicNodeGroup = { id: uid(), operator: "AND", conditions: [] };
+    setLogicTree((prev) => {
+      const cloned = JSON.parse(JSON.stringify(prev));
+      const addToGroup = (node: LogicNodeGroup): boolean => {
+        if (node.id === targetId) { node.conditions.push(newGroup); return true; }
+        for (const child of node.conditions) { 
+          if (!("ref" in child)) { 
+            if (addToGroup(child as LogicNodeGroup)) return true; 
+          } 
+        }
+        return false;
+      };
+      addToGroup(cloned);
+      return ensureGroupHasId(cloned);
+    });
   };
 
-  // update whole group in tree by reference equality
-  const updateGroupInTree = (root: LogicNodeGroup, target: LogicNodeGroup, replacement: LogicNodeGroup): LogicNodeGroup => {
-    if (root === target) return replacement;
-    const newRoot: LogicNodeGroup = { operator: root.operator, conditions: [] };
-    for (const it of root.conditions) {
-      if ("ref" in it) {
-        newRoot.conditions.push(it);
-      } else {
-        newRoot.conditions.push(updateGroupInTree(it as LogicNodeGroup, target, replacement));
-      }
+  // Shared Handlers
+  const handleUpdateGroup = (g: LogicNodeGroup) => setLogicTree(updateGroupInTree(logicTree, g));
+  const handleRemoveCondition = (id: UUID) => {
+      setConditions(conditions.filter(c => c.id !== id));
+      setLogicTree(removeRefFromTree(logicTree, id));
+  };
+  const handleUpdateCondition = (c: BaseCondition) => setConditions(conditions.map(old => old.id === c.id ? c : old));
+
+  // Default Init
+  useEffect(() => {
+    if (logicTree.conditions.length === 0 && conditions.length === 0) {
+        const c = createEmptyCondition();
+        setConditions([c]);
+        setLogicTree({ ...logicTree, conditions: [{ ref: c.id }]});
     }
-    return newRoot;
-  };
+  }, [logicTree, conditions]);
 
-  // Add initial convenience helpers: add a condition to root if empty
-  const ensureRootHasOne = useCallback(() => {
-    if ((logicTree.conditions?.length ?? 0) === 0) {
-      const c = createEmptyCondition();
-      setConditions((s) => [...s, c]);
-      setLogicTree((t) => ({ ...t, conditions: [{ ref: c.id }] }));
-    }
-  }, [logicTree]);
+  // Save
+  function stripGroupIds(node: LogicNodeGroup): ApiLogicNodeGroup {
+    const mapChild = (child: LogicNodeRef | LogicNodeGroup): ApiLogicNodeGroup | LogicNodeRef => {
+      if ("ref" in child) return child;
+      return stripGroupIds(child as LogicNodeGroup);
+    };
+    return {
+      operator: node.operator,
+      conditions: (node.conditions ?? []).map(mapChild),
+    };
+  }
 
-  // Save -> produce backend-ready payload
   const saveStrategy = async () => {
-    // validation: ensure refs line up
-    const referenced = new Set<string>();
-    const collectRefs = (node: LogicNodeGroup) => {
-      for (const it of node.conditions) {
-        if ("ref" in it) referenced.add(it.ref);
-        else collectRefs(it as LogicNodeGroup);
-      }
-    };
-    collectRefs(logicTree);
-    const missing = [...referenced].filter((r) => !conditions.find((c) => c.id === r));
-    if (missing.length > 0) {
-      toast({ title: "Invalid strategy", description: `Missing conditions for refs: ${missing.join(", ")}`, duration: 6000 });
-      return;
-    }
-
-    // Build payload for backend (StrategyCreateSchema): omit id
-    const payloadForBackend = {
-      name,
-      description,
-      schedule,
-      assets,
-      notification_preferences: initial?.notification_preferences ?? {},
-      conditions,
-      logic_tree: logicTree,
-    };
-
+    if (!name) return toast({ title: "Error", description: "Name required", variant: "destructive" });
     setSaving(true);
     try {
-      const saved = initial?.id
-        ? await updateStrategy(String(initial.id), payloadForBackend)
-        : await createStrategy(payloadForBackend);
-
-      onSave?.(saved);
-      toast({ title: "Strategy saved", description: `Saved strategy "${saved.name}"` });
-    } catch (error: any) {
-      console.error("Failed to create strategy", error);
-      const errorMessage = error.message || "Failed to create strategy";
-      toast({ title: "Save failed", description: errorMessage, variant: "destructive" });
+        const payload = { name, description, schedule, assets, conditions, logic_tree: stripGroupIds(logicTree), notification_preferences: initial?.notification_preferences ?? {} };
+        const result = initial?.id ? await updateStrategy(initial.id, payload) : await createStrategy(payload);
+        onSave?.(result);
+        toast({ title: "Success", description: "Strategy saved successfully." });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
 
-  // UI rendering
   return (
-    <div className="space-y-6 h-full overflow-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
-            <TrendingUp className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Strategy Builder</h1>
-            <p className="text-muted-foreground">Build nested Boolean strategies (AND/OR)</p>
-          </div>
+    <ReactFlowProvider>
+      <div className="flex flex-col h-full space-y-6">
+        
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+                <div className="bg-primary/10 p-3 rounded-xl border border-primary/20 shadow-sm">
+                    <TrendingUp className="w-6 h-6 text-primary" />
+                </div>
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight">Strategy Studio</h1>
+                    <p className="text-muted-foreground text-sm">Design algorithmic strategies visually or via logic steps.</p>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="bg-muted/50 p-1 rounded-lg border flex mr-4">
+                    <Button 
+                      variant={viewMode === "visual" ? "secondary" : "ghost"} 
+                      size="sm" 
+                      onClick={() => setViewMode("visual")} 
+                      className={cn("text-xs gap-2 h-8", viewMode === "visual" && "bg-background shadow-sm font-semibold")}
+                    >
+                        <Network className="w-3.5 h-3.5"/> Visual
+                    </Button>
+                    <Button 
+                      variant={viewMode === "simple" ? "secondary" : "ghost"} 
+                      size="sm" 
+                      onClick={() => setViewMode("simple")} 
+                      className={cn("text-xs gap-2 h-8", viewMode === "simple" && "bg-background shadow-sm font-semibold")}
+                    >
+                        <ListTree className="w-3.5 h-3.5"/> Logic Tree
+                    </Button>
+                </div>
+                <Separator orientation="vertical" className="h-6 mx-2" />
+                <Button variant="outline" size="sm" onClick={undoConditions} disabled={!canUndo} className="w-9 px-0"><Undo2 className="w-4 h-4" /></Button>
+                <Button variant="outline" size="sm" onClick={redoConditions} disabled={!canRedo} className="w-9 px-0"><Redo2 className="w-4 h-4" /></Button>
+                <Button onClick={saveStrategy} disabled={saving} className="min-w-[120px] ml-2 shadow-lg shadow-primary/20"><Save className="w-4 h-4 mr-2" /> Save</Button>
+            </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Share className="w-4 h-4 mr-2" />
-            Share
-          </Button>
-          <Button onClick={saveStrategy} size="sm" className="bg-gradient-primary" disabled={saving}>
-            <Save className="w-4 h-4 mr-2" />
-            {saving ? "Saving…" : "Save Strategy"}
-          </Button>
+
+        {/* SETTINGS */}
+        <Card className="border-border/60 shadow-sm bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-3 px-6 pt-5"><CardTitle className="text-base font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wider"><Settings className="w-4 h-4" /> Global Configuration</CardTitle></CardHeader>
+            <CardContent className="px-6 pb-6">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                    <div className="md:col-span-4 space-y-2"><Label>Strategy Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. BTC Breakout Strategy" className="bg-background" /></div>
+                    <div className="md:col-span-2 space-y-2">
+                        <Label>Schedule</Label>
+                        <Select value={schedule} onValueChange={setSchedule}>
+                            <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                            <SelectContent><SelectItem value="1m">1 Min</SelectItem><SelectItem value="5m">5 Min</SelectItem><SelectItem value="1h">1 Hour</SelectItem><SelectItem value="24h">Daily</SelectItem></SelectContent>
+                        </Select>
+                    </div>
+                    <div className="md:col-span-6 space-y-2">
+                        <Label>Assets</Label>
+                        <div className="flex flex-wrap gap-2 p-2 border rounded-md min-h-[42px] bg-background">
+                            {assets.map(a => <Badge key={a} variant="secondary" className="gap-1 pl-2.5 py-1 text-xs">{a}<Trash2 className="w-3 h-3 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => removeAsset(a)}/></Badge>)}
+                            <Select onValueChange={addAsset}><SelectTrigger className="w-[110px] h-6 border-none shadow-none text-xs text-muted-foreground"><SelectValue placeholder="+ Add Asset" /></SelectTrigger><SelectContent>{["BTC","ETH","SOL","AVAX","MATIC"].map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}</SelectContent></Select>
+                        </div>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+
+        {/* BUILDER CANVAS (SWITCHABLE) */}
+        <div className="flex-1 min-h-[600px] border rounded-xl bg-slate-50/50 relative overflow-hidden shadow-inner">
+             
+             {viewMode === "visual" ? (
+                <>
+                    <div className="absolute top-4 left-4 z-10 bg-background/90 backdrop-blur p-3 rounded-lg border shadow-lg space-y-3">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Drag & Drop Nodes</p>
+                        <div className="flex flex-col gap-2">
+                            <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => addConditionToGroup(logicTree.id!)}><Activity className="w-3.5 h-3.5 mr-2 text-blue-500" /> New Condition</Button>
+                            <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => addGroupToGroup(logicTree.id!)}><GitBranch className="w-3.5 h-3.5 mr-2 text-purple-500" /> New Logic Group</Button>
+                        </div>
+                    </div>
+                    <LogicTreeFlow 
+                        conditions={conditions} logicTree={logicTree} 
+                        onConditionsChange={setConditions} onLogicTreeChange={setLogicTree}
+                        onAddConditionToGroup={addConditionToGroup} onAddGroupToGroup={addGroupToGroup}
+                    />
+                </>
+             ) : (
+                <div className="p-8 max-w-5xl mx-auto h-full overflow-y-auto">
+                    <div className="mb-8 text-center space-y-1">
+                        <h3 className="text-xl font-bold tracking-tight">Logic Tree Editor</h3>
+                        <p className="text-sm text-muted-foreground">Define your strategy logic using a structured hierarchical list.</p>
+                    </div>
+                    <SimpleLogicTree 
+                        node={logicTree}
+                        conditions={conditions}
+                        depth={0}
+                        onUpdateGroup={handleUpdateGroup}
+                        onRemoveGroup={(id: any) => setLogicTree({ ...logicTree, conditions: [] })} 
+                        onAddCondition={addConditionToGroup}
+                        onAddGroup={addGroupToGroup}
+                        onUpdateCondition={handleUpdateCondition}
+                        onRemoveCondition={handleRemoveCondition}
+                    />
+                </div>
+             )}
         </div>
       </div>
-
-      {/* Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Settings className="w-5 h-5" /> Strategy Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label>Strategy Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div>
-              <Label>Schedule</Label>
-              <Select value={schedule} onValueChange={(v: any) => setSchedule(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1m">Every 1 minute</SelectItem>
-                  <SelectItem value="5m">Every 5 minutes</SelectItem>
-                  <SelectItem value="15m">Every 15 minutes</SelectItem>
-                  <SelectItem value="1h">Every 1 hour</SelectItem>
-                  <SelectItem value="4h">Every 4 hours</SelectItem>
-                  <SelectItem value="24h">Every 24 hours</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Assets</Label>
-              <Select onValueChange={(v: any) => addAsset(v)}>
-                <SelectTrigger><SelectValue placeholder="Add asset" /></SelectTrigger>
-                <SelectContent>
-                  {assetChoices.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {assets.map(a => (
-                  <Badge key={a} className="flex items-center gap-2 px-3 py-1">
-                    {a}
-                    <Button variant="ghost" size="sm" onClick={() => removeAsset(a)}><Trash2 className="w-3 h-3" /></Button>
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <Label>Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Logic Tree */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between w-full">
-            <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5" /> Logic Tree</CardTitle>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => addConditionToGroup(logicTree as any)}>
-                <Plus className="w-4 h-4 mr-2" /> Add Condition to Root
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => addGroupToGroup(logicTree as any)}>
-                <Plus className="w-4 h-4 mr-2" /> Add Group to Root
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <GroupBlock
-            node={logicTree}
-            conditionsMap={conditionsMap}
-            onAddConditionToGroup={(g) => addConditionToGroup(g)}
-            onAddGroupToGroup={(g) => addGroupToGroup(g)}
-            onUpdateGroup={(g) => setLogicTree(g)}
-            onRemoveGroup={() => {
-              // clearing root is not allowed - reset to empty
-              setLogicTree({ operator: "AND", conditions: [] });
-            }}
-            onUpdateCondition={updateCondition}
-            onRemoveCondition={(id) => removeCondition(id)}
-          />
-        </CardContent>
-      </Card>
-    </div>
+    </ReactFlowProvider>
   );
 }

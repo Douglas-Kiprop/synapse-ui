@@ -35,6 +35,9 @@ export interface StrategyModel {
   notification_preferences?: Record<string, any>;
   conditions: BaseCondition[];
   logic_tree: LogicNodeGroup;
+  status: string;
+  last_run_at?: string; // Assuming string for now, can be Date if needed
+  trigger_count?: number;
 }
 
 // When creating/updating via your backend (StrategyCreateSchema),

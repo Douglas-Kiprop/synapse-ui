@@ -4,6 +4,8 @@ import type {
   StrategyCreatePayload,
 } from "@/types/strategy";
 
+type StrategyUpdatePayload = Partial<StrategyCreatePayload>;
+
 export const useStrategyService = () => {
   const { fetchWithAuth } = useAuthFetch();
 
@@ -50,7 +52,8 @@ export const useStrategyService = () => {
       { base: "synapse", path }
     );
     if (!response.ok) {
-      throw new Error("Failed to list strategies");
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Failed to list strategies");
     }
     return response.json();
   };
@@ -58,7 +61,7 @@ export const useStrategyService = () => {
   // Update
   const updateStrategy = async (
     id: string,
-    strategy: StrategyCreatePayload
+    strategy: StrategyUpdatePayload
   ): Promise<StrategyModel> => {
     const response = await fetchWithAuth(
       "",
