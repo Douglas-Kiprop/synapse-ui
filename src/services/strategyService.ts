@@ -23,8 +23,53 @@ export const useStrategyService = () => {
       { base: "synapse", path: "strategies" }
     );
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || "Failed to create strategy");
+      let bodyText: string | undefined;
+      let errorData: any = undefined;
+      try {
+        bodyText = await response.text();
+        errorData = bodyText ? JSON.parse(bodyText) : undefined;
+      } catch {
+        // not JSON; keep the raw text
+      }
+      const detail = errorData?.detail ?? errorData?.message ?? bodyText ?? "Failed to create strategy";
+      const msg = typeof detail === "string" ? detail : JSON.stringify(detail);
+      const err: any = new Error(msg);
+      err.status = response.status;
+      err.data = errorData ?? bodyText;
+      throw err;
+    }
+    return response.json();
+  };
+
+  // Update
+  const updateStrategy = async (
+    id: string,
+    strategy: StrategyUpdatePayload
+  ): Promise<StrategyModel> => {
+    const response = await fetchWithAuth(
+      "",
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(strategy),
+      },
+      { base: "synapse", path: `strategies/${id}` }
+    );
+    if (!response.ok) {
+      let bodyText: string | undefined;
+      let errorData: any = undefined;
+      try {
+        bodyText = await response.text();
+        errorData = bodyText ? JSON.parse(bodyText) : undefined;
+      } catch {
+        // not JSON; keep the raw text
+      }
+      const detail = errorData?.detail ?? errorData?.message ?? bodyText ?? "Failed to update strategy";
+      const msg = typeof detail === "string" ? detail : JSON.stringify(detail);
+      const err: any = new Error(msg);
+      err.status = response.status;
+      err.data = errorData ?? bodyText;
+      throw err;
     }
     return response.json();
   };
@@ -58,27 +103,7 @@ export const useStrategyService = () => {
     return response.json();
   };
 
-  // Update
-  const updateStrategy = async (
-    id: string,
-    strategy: StrategyUpdatePayload
-  ): Promise<StrategyModel> => {
-    const response = await fetchWithAuth(
-      "",
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(strategy),
-      },
-      { base: "synapse", path: `strategies/${id}` }
-    );
-    if (!response.ok) {
-      if (response.status === 404) throw new Error("Strategy not found");
-      const errorData = await response.json();
-      throw new Error(errorData.detail || "Failed to update strategy");
-    }
-    return response.json();
-  };
+
 
   // Delete
   const deleteStrategy = async (id: string): Promise<void> => {
