@@ -1,6 +1,6 @@
 // src/components/dashboard/AnalyticsDashboard.tsx
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { 
   BarChart3, 
@@ -13,56 +13,93 @@ import {
   Search,
   BookOpen
 } from "lucide-react";
-import { LogicVisualizer } from "@/components/dashboard/LogicVisualizer"; // Make sure this path is correct
-
-// --- MOCK DATA ---
-// Replace with actual API fetches to your /internal/evaluate/{id} endpoint
-const MOCK_EVALUATION_DATA = {
-  met: true,
-  details: {
-    met: true,
-    evaluated: {
-      "10cacf91-bde8-4d8f": {
-        met: true,
-        value: 25.4582,
-        details: { indicator: "MACD", operator: "gt", threshold: 19.0, asset: "ETH", interval: "1h" }
-      },
-      "54a8be34-0ebd-4311": {
-        met: true,
-        value: 57.9545,
-        details: { indicator: "RSI", operator: "gt", threshold: 30.0, asset: "SOL", interval: "1h" }
-      },
-      "f047ef83-e6b9-4f48": {
-        met: true,
-        value: 3154.97,
-        details: { asset: "BTC", direction: "below", target: 4000.0 }
-      },
-      "a9b2c3d4-e5f6-7g8h": {
-        met: false,
-        value: 1.05,
-        details: { indicator: "ATR", operator: "lt", threshold: 1.0, asset: "AVAX", interval: "4h" }
-      }
-    }
-  }
-};
-
-const TRIGGER_LOGS = [
-  { id: "log-1", name: "BTC Institutional Sweep", time: "14:02:45", status: "TRIGGERED" },
-  { id: "log-2", name: "ETH Momentum Alpha", time: "13:58:12", status: "TRIGGERED" },
-  { id: "log-3", name: "SOL Breakout Test", time: "13:45:01", status: "HELD" },
-  { id: "log-4", name: "AVAX Volatility", time: "13:30:55", status: "TRIGGERED" },
-];
-
+import { LogicVisualizer } from "@/components/dashboard/LogicVisualizer"; 
+import { useMonitoringService, StrategyTriggerLog, TriggerLogRaw } from "@/services/monitoringService";
 
 const AnalyticsDashboard: React.FC = () => {
-  const [selectedLog, setSelectedLog] = useState<string | null>("log-1");
+  const { fetchHealth, fetchStrategies, fetchTriggerLogs, fetchMetrics } = useMonitoringService();
+  
+  // --- STATE ---
+  const [logs, setLogs] = useState<StrategyTriggerLog[]>([]);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState({ active: 0, total: 0 });
+  
   const [loading, setLoading] = useState(false);
+  const [isMonitoringServiceOnline, setIsMonitoringServiceOnline] = useState<boolean | null>(null);
 
-  // Simulate a data refresh
-  const handleRefresh = () => {
+  // --- DERIVED STATE ---
+  // Find the full log object based on the selected ID
+  const selectedLogData = useMemo(() => 
+    logs.find(l => l.id === selectedLogId), 
+    [logs, selectedLogId]
+  );
+
+  // Calculate success rate on the client side based on loaded logs
+  const successRate = useMemo(() => {
+    if (logs.length === 0) return "0.0%";
+    const triggeredCount = logs.filter(l => l.status === "TRIGGERED").length;
+    return `${((triggeredCount / logs.length) * 100).toFixed(1)}%`;
+  }, [logs]);
+
+  // --- DATA FETCHING ---
+  const handleRefresh = async () => {
     setLoading(true);
-    setTimeout(() => setLoading(false), 1000);
+    try {
+      // 1. Check Health
+      const online = await fetchHealth();
+      setIsMonitoringServiceOnline(online);
+
+      // 2. Fetch Strategies (To map ID -> Name)
+      const strategiesData = await fetchStrategies();
+      
+      // 3. Fetch Metrics
+      const metricsData = await fetchMetrics();
+      setMetrics({
+        active: metricsData.active_strategies,
+        total: metricsData.total_trigger_logs
+      });
+
+      // 4. Fetch Logs and Transform
+      const rawLogs = await fetchTriggerLogs();
+      
+      // We need to merge the raw log (which has strategy_id) with the strategy list (which has name)
+      const formattedLogs: StrategyTriggerLog[] = rawLogs.map((log: TriggerLogRaw) => {
+        const strategy = strategiesData.find(s => s.id === log.strategy_id);
+        
+        return {
+          id: log.id,
+          name: strategy ? strategy.name : "Unknown Strategy", // Handle cases where strategy might be deleted
+          time: new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+          status: log.snapshot.met ? "TRIGGERED" : "HELD",
+          rawSnapshot: log.snapshot // Store the raw snapshot for the Visualizer
+        };
+      });
+
+      // Reverse to show newest first
+      const sortedLogs = formattedLogs.reverse(); 
+
+      setLogs(sortedLogs);
+      
+      // Auto-select the most recent log if nothing is selected
+      if (sortedLogs.length > 0 && !selectedLogId) {
+        setSelectedLogId(sortedLogs[0].id);
+      } else if (sortedLogs.length > 0 && selectedLogId) {
+         // Ensure selection is still valid after refresh
+         const exists = sortedLogs.find(l => l.id === selectedLogId);
+         if (!exists) setSelectedLogId(sortedLogs[0].id);
+      }
+
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+      setIsMonitoringServiceOnline(false);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    handleRefresh();
+  }, []);
 
   return (
     <div className="min-h-full bg-background text-foreground space-y-8 p-0">
@@ -85,22 +122,34 @@ const AnalyticsDashboard: React.FC = () => {
           >
             <RefreshCcw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <div className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center gap-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-sm font-medium text-emerald-500">Monitoring Service Online</span>
+          <div className={`px-4 py-2 rounded-full flex items-center gap-2 ${
+            isMonitoringServiceOnline === true ? 'bg-emerald-500/10 border-emerald-500/20' : 
+            isMonitoringServiceOnline === false ? 'bg-red-500/10 border-red-500/20' : 'bg-gray-500/10 border-gray-500/20'
+          }`}>
+            <div className={`w-2 h-2 rounded-full ${
+              isMonitoringServiceOnline === true ? 'bg-emerald-500 animate-pulse' : 
+              isMonitoringServiceOnline === false ? 'bg-red-500' : 'bg-gray-500'
+            }`} />
+            <span className={`text-sm font-medium ${
+              isMonitoringServiceOnline === true ? 'text-emerald-500' : 
+              isMonitoringServiceOnline === false ? 'text-red-500' : 'text-gray-500'
+            }`}>
+              {isMonitoringServiceOnline === true ? 'Monitoring Service Online' : 
+               isMonitoringServiceOnline === false ? 'Monitoring Service Offline' : 'Checking Status...'}
+            </span>
           </div>
         </div>
       </div>
 
       <hr className="border-border/50" />
 
-      {/* KEY METRICS GRID (Based on your /metrics endpoint) */}
+      {/* KEY METRICS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { title: "Active Strategies", value: "12", icon: Activity, trend: "Fetched from /metrics", color: "text-blue-500" },
-          { title: "Total Trigger Logs", value: "843", icon: Zap, trend: "Fetched from /metrics", color: "text-amber-500" },
-          { title: "Avg. Eval Latency", value: "45ms", icon: History, trend: "Next feature", color: "text-purple-500" },
-          { title: "Trigger Success Rate", value: "68.5%", icon: CheckCircle2, trend: "Derived metric", color: "text-emerald-500" },
+          { title: "Active Strategies", value: metrics.active, icon: Activity, trend: "Fetched from /strategies", color: "text-blue-500" },
+          { title: "Total Trigger Logs", value: metrics.total, icon: Zap, trend: "Fetched from /metrics", color: "text-amber-500" },
+          { title: "Avg. Eval Latency", value: "45ms", icon: History, trend: "Calculated (Mock)", color: "text-purple-500" },
+          { title: "Trigger Success Rate", value: successRate, icon: CheckCircle2, trend: "Derived from logs", color: "text-emerald-500" },
         ].map((stat, i) => (
           <Card key={i} className="bg-gradient-to-br from-card to-card/50 border-border/50 shadow-md hover:border-primary/50 transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -128,35 +177,45 @@ const AnalyticsDashboard: React.FC = () => {
             </div>
             
             {/* The Scrollable Feed */}
-            <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
-                {TRIGGER_LOGS.map((log, i) => (
+            <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
+                {logs.length === 0 && !loading && (
+                    <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl">
+                        No logs found.
+                    </div>
+                )}
+                
+                {logs.map((log) => (
                     <div 
                         key={log.id}
-                        onClick={() => setSelectedLog(log.id)}
-                        className={`p-4 rounded-xl border transition-all duration-200 group
-                            ${selectedLog === log.id 
+                        onClick={() => setSelectedLogId(log.id)}
+                        className={`p-4 rounded-xl border transition-all duration-200 group cursor-pointer
+                            ${selectedLogId === log.id 
                                 ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10' 
                                 : 'bg-card border-border/50 hover:border-border hover:bg-accent/50'}
                         `}
                     >
                         <div className="flex justify-between items-start mb-2">
-                            <span className="font-semibold text-base">{log.name}</span>
-                            <span className="text-xs text-muted-foreground font-mono">{log.time}</span>
+                            <span className="font-semibold text-base truncate pr-2">{log.name}</span>
+                            <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">{log.time}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className={`text-xs px-2 py-1 rounded font-medium ${
-                                log.status === 'TRIGGERED' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
+                                log.status === 'TRIGGERED' ? 'bg-emerald-500/10 text-emerald-500' : 
+                                log.status === 'HELD' ? 'bg-amber-500/10 text-amber-500' :
+                                'bg-red-500/10 text-red-500'
                             }`}>
                                 {log.status}
                             </span>
-                            <span className="text-xs text-muted-foreground">Log ID: {log.id.split('-')[1]}...</span>
+                            <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                                Log ID: {log.id.split('-')[0]}...
+                            </span>
                         </div>
                     </div>
                 ))}
             </div>
         </div>
 
-        {/* RIGHT COLUMN: LOGIC VISUALIZER (The Auditable Decision Path) */}
+        {/* RIGHT COLUMN: LOGIC VISUALIZER */}
         <div className="lg:col-span-2">
             <Card className="h-full bg-gradient-to-b from-card to-background border-border/50 shadow-2xl shadow-primary/10">
                 <CardHeader className="border-b border-border/50 bg-muted/20">
@@ -166,17 +225,30 @@ const AnalyticsDashboard: React.FC = () => {
                                 <Search className="w-5 h-5 text-primary" />
                                 Strategy Execution Trace
                             </CardTitle>
-                            <CardDescription>Visualizing the verifiable logic tree for **{TRIGGER_LOGS.find(l => l.id === selectedLog)?.name || 'N/A'}**</CardDescription>
+                            <CardDescription>
+                                {selectedLogData 
+                                    ? `Visualizing the verifiable logic tree for **${selectedLogData.name}**`
+                                    : "Select a log entry to visualize execution logic"
+                                }
+                            </CardDescription>
                         </div>
-                        <div className="text-right">
-                             <div className="text-xs font-mono text-muted-foreground">Block Height: 18,234,129</div>
-                             <div className="text-xs font-mono text-emerald-400 font-bold">ON-CHAIN VERIFIABLE</div>
-                        </div>
+                        {selectedLogData && (
+                            <div className="text-right hidden sm:block">
+                                 <div className="text-xs font-mono text-muted-foreground">ID: {selectedLogData.id.split('-')[0]}</div>
+                                 <div className="text-xs font-mono text-emerald-400 font-bold">ON-CHAIN VERIFIABLE</div>
+                            </div>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="p-6">
-                    {/* The God Level Component */}
-                    <LogicVisualizer data={MOCK_EVALUATION_DATA} />
+                    {selectedLogData ? (
+                        <LogicVisualizer data={selectedLogData.rawSnapshot} />
+                    ) : (
+                        <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground">
+                            <Activity className="w-12 h-12 mb-4 opacity-20" />
+                            <p>Select a trigger event from the feed to inspect its logic.</p>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

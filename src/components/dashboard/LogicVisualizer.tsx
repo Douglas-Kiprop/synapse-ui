@@ -1,9 +1,9 @@
-// src/components/LogicVisualizer.tsx
+// src/components/dashboard/LogicVisualizer.tsx
 
 import React from 'react';
-import { Terminal, Activity, RefreshCcw } from 'lucide-react';
+import { Terminal, Activity } from 'lucide-react';
 
-// --- Types based on your backend evaluation response ---
+// --- Types compatible with your backend LogicSnapshot ---
 interface ConditionDetail {
   indicator?: string;
   operator?: string;
@@ -12,21 +12,21 @@ interface ConditionDetail {
   interval?: string;
   direction?: string;
   target?: number;
+  [key: string]: any; // Catch-all for other properties
 }
 
 interface EvaluatedNode {
   met: boolean;
-  value?: number;
+  value: number | null;
   details: ConditionDetail;
 }
 
 interface LogicTreeProps {
+  // This matches the 'snapshot' object from your API
   data: {
-    met: boolean; // Overall result
-    details: {
-      met: boolean; // Overall result (redundant, but useful for clarity)
-      evaluated: Record<string, EvaluatedNode>; // The list of conditions
-    };
+    met: boolean;
+    evaluated?: Record<string, EvaluatedNode>; 
+    message?: string | null;
   };
 }
 
@@ -52,20 +52,30 @@ const LogicCard = ({ node, id }: { node: EvaluatedNode; id: string }) => {
           
           {/* CONDITION DISPLAY */}
           <div className="flex items-center gap-2 text-sm font-medium text-foreground flex-wrap">
-            {node.details.asset && <span className="text-primary">{node.details.asset}</span>}
-            {(node.details.indicator || node.details.asset) && <span className="uppercase">{node.details.indicator || 'PRICE'}</span>}
+            {node.details?.asset && <span className="text-primary">{node.details.asset}</span>}
+            
+            {(node.details?.indicator || node.details?.asset) && (
+                <span className="uppercase">{node.details.indicator || 'PRICE'}</span>
+            )}
+            
             <span className="text-muted-foreground">
-              {node.details.operator === 'gt' ? '>' : node.details.operator === 'lt' ? '<' : node.details.direction || 'is'}
+              {node.details?.operator === 'gt' ? '>' : node.details?.operator === 'lt' ? '<' : node.details?.direction || 'is'}
             </span>
-            <span className="text-foreground">{node.details.threshold || node.details.target}</span>
-            {node.details.interval && <span className="text-xs text-muted-foreground ml-2">({node.details.interval})</span>}
+            
+            <span className="text-foreground">
+                {node.details?.threshold ?? node.details?.target ?? 'N/A'}
+            </span>
+            
+            {node.details?.interval && (
+                <span className="text-xs text-muted-foreground ml-2">({node.details.interval})</span>
+            )}
           </div>
         </div>
 
         <div className="text-right flex-shrink-0 ml-4">
           <p className="text-xs text-muted-foreground">Current/Measured</p>
           <p className={`font-mono font-bold ${isMet ? 'text-emerald-400' : 'text-red-400'}`}>
-            {node.value?.toFixed(2) || 'N/A'}
+            {node.value !== null && node.value !== undefined ? node.value.toFixed(2) : 'N/A'}
           </p>
         </div>
       </div>
@@ -74,9 +84,16 @@ const LogicCard = ({ node, id }: { node: EvaluatedNode; id: string }) => {
 };
 
 export const LogicVisualizer: React.FC<LogicTreeProps> = ({ data }) => {
-  if (!data || !data.details || !data.details.evaluated) return null;
+  // Safety check: if data is null or evaluated is missing
+  if (!data || !data.evaluated) {
+    return (
+        <div className="p-4 text-center text-muted-foreground text-sm italic border border-dashed rounded-lg">
+            No detailed logic trace available for this log.
+        </div>
+    );
+  }
 
-  const nodes = Object.entries(data.details.evaluated);
+  const nodes = Object.entries(data.evaluated);
 
   return (
     <div className="space-y-4">
@@ -118,7 +135,7 @@ export const LogicVisualizer: React.FC<LogicTreeProps> = ({ data }) => {
       
       {/* Verifiability Tag */}
       <div className="mt-6 pt-4 border-t border-border/40 flex justify-between items-center text-xs text-muted-foreground font-mono">
-        <span>VERIFIABLE LOG ID: ${Math.random().toString(36).substring(2, 10).toUpperCase()}</span>
+        <span>VERIFIABLE LOG ID: {Math.random().toString(36).substring(2, 10).toUpperCase()}</span>
         <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             LIVE AUDIT TRACE
