@@ -362,15 +362,56 @@ function LogicTreeFlow({
 // 5. SIMPLE MODE: RECURSIVE LIST & EDITOR
 // ==========================================
 
-const ConditionEditor = ({ condition, onChange, onRemove }: { condition: BaseCondition; onChange: (c: BaseCondition) => void; onRemove: (id: UUID) => void; }) => {
-  const indicators = ["rsi", "macd", "ema", "sma", "bollinger", "volume", "price_change"];
+const ConditionEditor = ({
+  condition,
+  onChange,
+  onRemove,
+  availableAssets = [],
+}: {
+  condition: BaseCondition;
+  onChange: (c: BaseCondition) => void;
+  onRemove: (id: UUID) => void;
+  availableAssets?: string[];
+}) => {
+  const indicators = ["rsi", "macd", "ema", "sma", "bollinger"];
   
   return (
     <div className="p-4 border rounded-xl bg-card hover:border-primary/30 transition-colors shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <div className="flex gap-2 items-center">
           <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">{condition.type.replace(/_/g, ' ').toUpperCase()}</Badge>
-          <Select value={condition.type} onValueChange={(v: any) => onChange({ ...condition, type: v as ConditionType })}>
+          <Select
+            value={condition.type}
+            onValueChange={(v: any) => {
+              const type = v as ConditionType;
+              let newPayload: Record<string, any> = {};
+              if (type === "technical_indicator") {
+            newPayload = {
+              indicator: "rsi",
+              operator: "lt",
+              value: 30,
+              timeframe: "1h",
+              asset: availableAssets[0] ?? "",
+            };
+          } else if (type === "price_alert") {
+            newPayload = {
+              asset: availableAssets[0] ?? "",
+              direction: "above",
+              target_price: 0,
+            };
+          } else if (type === "volume_alert") {
+            newPayload = {
+              asset: availableAssets[0] ?? "",
+              timeframe: "1h",
+              operator: "gt",
+              threshold: 0,
+            };
+          } else {
+            newPayload = {};
+          }
+              onChange({ ...condition, type, payload: newPayload });
+            }}
+          >
             <SelectTrigger className="h-7 w-[160px] text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="technical_indicator">Technical Indicator</SelectItem>
@@ -430,9 +471,173 @@ const ConditionEditor = ({ condition, onChange, onRemove }: { condition: BaseCon
                 </SelectContent>
               </Select>
             </div>
+
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Asset</Label>
+              {availableAssets && availableAssets.length > 0 ? (
+                <Select
+                  value={condition.payload.asset ?? availableAssets[0]}
+                  onValueChange={(v: any) =>
+                    onChange({ ...condition, payload: { ...condition.payload, asset: v } })
+                  }
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {availableAssets.map((a) => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={condition.payload.asset ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...condition,
+                      payload: { ...condition.payload, asset: e.target.value },
+                    })
+                  }
+                  className="h-9"
+                  placeholder="e.g., BTC"
+                />
+              )}
+            </div>
           </div>
         )}
-        
+
+        {condition.type === "price_alert" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Asset</Label>
+              <Input
+                value={condition.payload.asset ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...condition,
+                    payload: { ...condition.payload, asset: e.target.value },
+                  })
+                }
+                className="h-9"
+                placeholder="e.g., BTC"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Direction</Label>
+              <Select
+                value={condition.payload.direction ?? "above"}
+                onValueChange={(v: any) =>
+                  onChange({
+                    ...condition,
+                    payload: { ...condition.payload, direction: v },
+                  })
+                }
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="above">Above</SelectItem>
+                  <SelectItem value="below">Below</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Target Price</Label>
+              <Input
+                type="number"
+                value={condition.payload.target_price ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...condition,
+                    payload: {
+                      ...condition.payload,
+                      target_price: parseFloat(e.target.value) || 0,
+                    },
+                  })
+                }
+                className="h-9"
+                placeholder="e.g., 50000"
+              />
+            </div>
+          </div>
+        )}
+
+        {condition.type === "volume_alert" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Asset</Label>
+              <Input
+                value={condition.payload.asset ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...condition,
+                    payload: { ...condition.payload, asset: e.target.value },
+                  })
+                }
+                className="h-9"
+                placeholder="e.g., BTC"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Timeframe</Label>
+              <Select
+                value={condition.payload.timeframe ?? "1h"}
+                onValueChange={(v: any) =>
+                  onChange({
+                    ...condition,
+                    payload: { ...condition.payload, timeframe: v },
+                  })
+                }
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1m">1 Minute</SelectItem>
+                  <SelectItem value="5m">5 Minutes</SelectItem>
+                  <SelectItem value="15m">15 Minutes</SelectItem>
+                  <SelectItem value="30m">30 Minutes</SelectItem>
+                  <SelectItem value="1h">1 Hour</SelectItem>
+                  <SelectItem value="4h">4 Hours</SelectItem>
+                  <SelectItem value="1d">1 Day</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Operator</Label>
+              <Select
+                value={condition.payload.operator ?? "gt"}
+                onValueChange={(v: any) =>
+                  onChange({
+                    ...condition,
+                    payload: { ...condition.payload, operator: v },
+                  })
+                }
+              >
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gt">Greater than (&gt;)</SelectItem>
+                  <SelectItem value="lt">Less than (&lt;)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Threshold</Label>
+              <Input
+                type="number"
+                value={condition.payload.threshold ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...condition,
+                    payload: {
+                      ...condition.payload,
+                      threshold: parseFloat(e.target.value) || 0,
+                    },
+                  })
+                }
+                className="h-9"
+                placeholder="e.g., 1000000"
+              />
+            </div>
+          </div>
+        )}
+
         {condition.type !== "technical_indicator" && (
              <div className="p-3 bg-muted/20 rounded-md text-sm text-muted-foreground border border-dashed text-center">
                  Configure {condition.type.replace(/_/g, ' ')} parameters here.
@@ -443,11 +648,11 @@ const ConditionEditor = ({ condition, onChange, onRemove }: { condition: BaseCon
   );
 };
 
-const SimpleLogicTree = ({ node, conditions, depth = 0, onUpdateGroup, onRemoveGroup, onAddCondition, onAddGroup, onUpdateCondition, onRemoveCondition }: any) => {
+const SimpleLogicTree = ({ node, conditions, depth = 0, onUpdateGroup, onRemoveGroup, onAddCondition, onAddGroup, onUpdateCondition, onRemoveCondition, availableAssets }: any) => {
     if ("ref" in node) {
         const cond = conditions.find((c: any) => c.id === node.ref);
         if (!cond) return <div className="p-2 text-red-500 text-xs border rounded bg-red-50">Missing Condition</div>;
-        return <div className="ml-6"><ConditionEditor condition={cond} onChange={onUpdateCondition} onRemove={onRemoveCondition} /></div>;
+        return <div className="ml-6"><ConditionEditor condition={cond} onChange={onUpdateCondition} onRemove={onRemoveCondition} availableAssets={availableAssets} /></div>;
     }
 
     const group = ensureGroupHasId(node) as LogicNodeGroup;
@@ -637,6 +842,44 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
   }, [logicTree, conditions]);
 
   // Save
+  const sanitizeConditionPayload = (condition: BaseCondition): BaseCondition => {
+    const baseCondition = { ...condition };
+    let sanitizedPayload: Record<string, any> = {};
+
+    switch (baseCondition.type) {
+      case "technical_indicator":
+        sanitizedPayload = {
+          indicator: baseCondition.payload?.indicator ?? "rsi",
+          operator: baseCondition.payload?.operator ?? "lt",
+          value: baseCondition.payload?.value ?? 30,
+          timeframe: baseCondition.payload?.timeframe ?? "1h",
+          asset: baseCondition.payload?.asset ?? assets[0] ?? "BTC",
+        };
+        break;
+      case "price_alert":
+        sanitizedPayload = {
+          asset: baseCondition.payload?.asset ?? "",
+          direction: baseCondition.payload?.direction ?? "above",
+          target_price: baseCondition.payload?.target_price ?? 0,
+        };
+        break;
+      case "volume_alert":
+        sanitizedPayload = {
+          asset: baseCondition.payload?.asset ?? "",
+          timeframe: baseCondition.payload?.timeframe ?? "1h",
+          operator: baseCondition.payload?.operator ?? "gt",
+          threshold: baseCondition.payload?.threshold ?? 0,
+        };
+        break;
+      case "wallet_inflow":
+      case "custom":
+      default:
+        sanitizedPayload = baseCondition.payload || {};
+        break;
+    }
+    return { ...baseCondition, payload: sanitizedPayload };
+  };
+
   function stripGroupIds(node: LogicNodeGroup): ApiLogicNodeGroup {
     const mapChild = (child: LogicNodeRef | LogicNodeGroup): ApiLogicNodeGroup | LogicNodeRef => {
       if ("ref" in child) return child;
@@ -652,17 +895,19 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
     if (!name) return toast({ title: "Error", description: "Name required", variant: "destructive" });
     setSaving(true);
     try {
+        const sanitizedConditions = conditions.map(sanitizeConditionPayload);
         const payload: StrategyCreatePayload = {
             name,
             description,
             schedule,
             assets,
-            conditions: conditions as unknown as ApiBaseCondition[],
+            conditions: sanitizedConditions as unknown as ApiBaseCondition[],
             logic_tree: stripGroupIds(logicTree),
             notification_preferences: notificationPreferences,
-            status: initial?.status ?? "paused",
+            status: initial?.status ?? "active",
             // last_run_at and trigger_count are optional for create payload
         };
+        console.log("POST /strategies Payload:", JSON.stringify(payload, null, 2));
 
         const result = initial?.id
             ? await updateStrategy(initial.id, payload)
@@ -671,8 +916,12 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
         onSave?.(result);
         toast({ title: "Success", description: "Strategy saved successfully." });
     } catch (e: any) {
-        const msg = typeof e?.message === "string" ? e.message : "Unknown error";
-        toast({ title: "Failed", description: msg, variant: "destructive" });
+        console.error("Backend error body:", e.data);
+        toast({
+          title: "Failed",
+          description: `Error: ${e.status || "Unknown"} - ${e.data || e.message || "An unexpected error occurred."}`,
+          variant: "destructive",
+        });
     } finally {
         setSaving(false);
     }
@@ -870,6 +1119,7 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
                         onAddGroup={addGroupToGroup}
                         onUpdateCondition={handleUpdateCondition}
                         onRemoveCondition={handleRemoveCondition}
+                        availableAssets={assets}
                     />
                 </div>
              )}

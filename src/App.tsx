@@ -14,6 +14,8 @@ import GainersLosersPage from "./pages/market-data/GainersLosersPage";
 import HeatmapPage from "./pages/market-data/HeatmapPage";
 import NotFound from "./pages/NotFound";
 import StrategiesPage from "./pages/StrategiesPage";
+import SignalsPage from "./pages/SignalsPage";
+import SettingsPage from "./pages/SettingsPage";
 import { usePrivy } from "@privy-io/react-auth";
 import { useAuthFetch } from "./hooks/useAuthFetch";
 import { useToast } from "./components/ui/use-toast";
@@ -95,16 +97,16 @@ const App = () => {
                 <StrategyBuilderPage />
               </MainLayout>
             } />
-            <Route path="/portfolio" element={
-              <MainLayout>
-                <PortfolioPage />
-              </MainLayout>
-            } />
             <Route path="/analytics" element={
               <MainLayout>
                 <AnalyticsPage />
               </MainLayout>
             } />
+            <Route path="/portfolio" element={
+              <MainLayout>
+                <PortfolioPage />
+              </MainLayout>
+            } />            
             <Route path="/market-data" element={
               <MainLayout>
                 <MarketDataPage />
@@ -117,17 +119,17 @@ const App = () => {
             } />
             <Route path="/signals" element={
               <MainLayout>
-                <AnalyticsPage />
+                <SignalsPage />
               </MainLayout>
             } />
             <Route path="/tools/*" element={
               <MainLayout>
-                <AnalyticsPage />
+                <NotFound />
               </MainLayout>
             } />
             <Route path="/settings" element={
               <MainLayout>
-                <AnalyticsPage />
+                <SettingsPage />
               </MainLayout>
             } />
             <Route path="/strategies" element={

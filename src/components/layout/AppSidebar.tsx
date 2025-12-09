@@ -37,7 +37,7 @@ const navigationItems = [
   { title: "Strategy Builder", url: "/strategy-builder", icon: Brain },
   { title: "Strategies", url: "/strategies", icon: Target },
   { title: "Portfolio", url: "/portfolio", icon: PieChart },
-  { title: "Analytics", url: "/analytics", icon: BarChart3 },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },  
   { title: "Market Data", url: "/market-data", icon: TrendingUp },
   { title: "Signals", url: "/signals", icon: Zap },
 ];
