@@ -1,5 +1,6 @@
+// src/components/ChatPanel.tsx - PRODUCTION READY
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Zap, CheckCircle, Brain, X } from "lucide-react";
+import { Send, User, CheckCircle, Brain, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ReactMarkdown from "react-markdown";
@@ -8,23 +9,37 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { toast as sonnerToast } from "sonner";  // Direct sonner for loading/dismiss
+import { toast as sonnerToast } from "sonner";
 import { StrategyBubble } from "./StrategyBubble";
 import { useAgentPanel } from "@/contexts/AgentPanelContext";
 import { useAuthFetch } from "@/hooks/useAuthFetch";
-import { usePayment, PaymentResult } from "@/hooks/usePayment";  // New: For x402 payments
+import { usePayment } from "@/hooks/usePayment";
 
 interface Message {
   id: string;
   content: string;
   sender: "user" | "agent";
   timestamp: Date;
-  strategy?: any; // For strategy transfer from StrategyBuilder
+  strategy?: any;
 }
 
 interface ChatPanelProps {
   onApplyStrategy?: (strategy: any) => void;
   currentStrategy?: any;
+}
+
+interface PaymentDetails {
+  amount: string;
+  amount_wei: string;
+  recipient: string;
+  chain: string;
+  description: string;
+  tool_name: string;
+}
+
+interface PendingPayment {
+  originalMessage: string;
+  paymentDetails: PaymentDetails;
 }
 
 export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) {
@@ -54,31 +69,12 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hasStrategyToApply, setHasStrategyToApply] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState<PendingPayment | null>(null);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
-  const { toast: shadcnToast } = useToast();  // Shadcn for simple toasts
+  const { toast: shadcnToast } = useToast();
   const { closeAgent } = useAgentPanel();
   const { fetchWithAuth } = useAuthFetch();
-
-  // New: x402 payment hook
-  const { handlePayment, isProcessing: paymentProcessing } = usePayment({
-    treasuryAddress: import.meta.env.VITE_TREASURY_ADDRESS || "0xYourDeployedReceiverAddress",  // Add to .env
-    feeAmount: 0.0005,
-    onSuccess: (result: PaymentResult) => {
-      if (result.txnHash) {
-        // Auto-retry API with txn hash for backend verification
-        retryWithPayment(result.txnHash);
-      }
-    },
-    onError: (error) => {
-      shadcnToast({
-        title: "Payment Error",
-        description: error,
-        variant: "destructive",
-      });
-      setIsLoading(false);  // Reset loading on error
-    },
-    description: "Premium Tool Access",
-  });
+  const { handlePayment, isProcessing: paymentProcessing } = usePayment();
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -88,57 +84,23 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
     setHasStrategyToApply(!!currentStrategy);
   }, [currentStrategy]);
 
-  // New: Helper for retry after payment
-  const retryWithPayment = async (txnHash: `0x${string}`) => {
-    try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL;
-      const retryResponse = await fetchWithAuth(`${backendUrl}/x402/pay-and-execute`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          tool: "premium_coingecko",  // From 402 details or query (customize as needed)
-          txn_hash: txnHash 
-        }),
-      });
+  const handleSendMessage = async (retryWithHash?: string) => {
+    const messageToSend = retryWithHash ? pendingPayment?.originalMessage : inputValue;
+    
+    if (!messageToSend?.trim()) return;
 
-      if (!retryResponse.ok) {
-        throw new Error(`Retry failed: ${retryResponse.status}`);
-      }
-
-      const retryData = await retryResponse.json();
-      const agentResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: retryData.data?.response || "Tool executed successfully after payment.",
-        sender: "agent",
+    // Only add user message if it's a new message (not a retry)
+    if (!retryWithHash) {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        content: inputValue,
+        sender: "user",
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, agentResponse]);
-      sonnerToast.loading("Payment verified—tool executing...", { id: "payment-verify" });  // Sonner loading
-      sonnerToast.dismiss("payment-verify");
-      sonnerToast.success("Premium tool unlocked!");
-    } catch (retryErr) {
-      console.error("Retry after payment failed:", retryErr);
-      shadcnToast({
-        title: "Execution Error",
-        description: "Payment succeeded, but tool execution failed. Try again.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
+      setMessages(prev => [...prev, userMessage]);
+      setInputValue("");
     }
-  };
-
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: inputValue,
-      sender: "user",
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue("");
+    
     setIsLoading(true);
 
     try {
@@ -155,30 +117,44 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
         return;
       }
 
-      let response = await fetchWithAuth(backendUrl, {
+      const response = await fetchWithAuth(backendUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message: inputValue }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          message: messageToSend,
+          txn_hash: retryWithHash || null
+        }),
       });
 
-      // New: Handle x402 Payment Required
+      // ✅ Handle x402 Payment Required
       if (response.status === 402) {
-        const paymentDetails = await response.json();  // Expect { error: "...", details: { payment: { ... } } }
-        shadcnToast({
-          title: "Premium Access Required",
-          description: `Pay ${paymentDetails.details?.payment?.amount || 0.0005} AVAX to unlock this tool?`,
-        });
+        const paymentData = await response.json();
+        console.log("💳 Payment required:", paymentData);
 
-        const paymentResult = await handlePayment();
-        if (!paymentResult.success) {
-          return;  // User cancelled or failed; loading already reset in onError
+        // ✅ FIXED: Correct path to payment details
+        const paymentDetails: PaymentDetails = paymentData.payment;
+
+        if (!paymentDetails) {
+          throw new Error("Invalid payment response from server");
         }
 
-        // Payment succeeded—loading continues (retry handled in onSuccess)
-        sonnerToast.loading("Verifying payment and executing tool...");
-        return;  // Don't process further here
+        // Store the original message and payment details
+        setPendingPayment({
+          originalMessage: messageToSend,
+          paymentDetails: paymentDetails
+        });
+
+        // Show payment prompt to user
+        const agentMessage: Message = {
+          id: Date.now().toString(),
+          content: `🔒 **Premium Tool Access Required**\n\nTo use **${paymentDetails.tool_name}**, you need to pay **${paymentDetails.amount} AVAX**.\n\n**Recipient:** \`${paymentDetails.recipient}\`\n\n**Description:** ${paymentDetails.description}\n\nClick the "Pay Now" button below to proceed with payment.`,
+          sender: "agent",
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, agentMessage]);
+        setIsLoading(false);
+        return;
       }
 
       if (!response.ok) {
@@ -195,6 +171,10 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
       };
 
       setMessages(prev => [...prev, agentResponse]);
+      
+      // Clear pending payment after successful response
+      setPendingPayment(null);
+
     } catch (error) {
       console.error("Error sending message to backend:", error);
       shadcnToast({
@@ -203,10 +183,72 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
         variant: "destructive",
       });
     } finally {
-      if (!paymentProcessing) {  // Only reset if not in payment flow
+      if (!paymentProcessing) {
         setIsLoading(false);
       }
     }
+  };
+
+  const handlePayNow = async () => {
+    if (!pendingPayment) return;
+
+    try {
+      sonnerToast.loading("Preparing payment...", { id: "payment-flow" });
+
+      // Trigger payment via usePayment hook
+      const result = await handlePayment(pendingPayment.paymentDetails);
+
+      if (!result.success || !result.txnHash) {
+        sonnerToast.dismiss("payment-flow");
+        if (!result.error?.includes("cancel") && !result.error?.includes("reject")) {
+          shadcnToast({
+            title: "Payment Failed",
+            description: result.error || "Unknown error occurred",
+            variant: "destructive",
+          });
+        }
+        setPendingPayment(null);
+        return;
+      }
+
+      sonnerToast.dismiss("payment-flow");
+
+      const paymentConfirmation: Message = {
+        id: Date.now().toString(),
+        content: `✅ Payment successful!\n\nTransaction: \`${result.txnHash}\`\n\nVerifying payment and executing tool...`,
+        sender: "agent",
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, paymentConfirmation]);
+
+      // ✅ Retry original request with transaction hash
+      sonnerToast.loading("Executing premium tool...", { id: "tool-execution" });
+      await handleSendMessage(result.txnHash);
+      sonnerToast.dismiss("tool-execution");
+
+    } catch (error) {
+      console.error("Payment error:", error);
+      sonnerToast.dismiss("payment-flow");
+      sonnerToast.dismiss("tool-execution");
+      
+      shadcnToast({
+        title: "Payment Error",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      });
+      
+      setPendingPayment(null);
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancelPayment = () => {
+    setPendingPayment(null);
+    shadcnToast({
+      title: "Payment Cancelled",
+      description: "You can try again anytime.",
+    });
   };
 
   const handleApplyStrategy = () => {
@@ -281,15 +323,13 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
                 ) : (
                   <div
                     className={cn(
-                      "p-3 rounded-lg prose prose-invert text-sm max-w-none", // Added prose classes here
+                      "p-3 rounded-lg prose prose-invert text-sm max-w-none",
                       message.sender === "user"
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary text-secondary-foreground"
                     )}
                   >
-                    <ReactMarkdown
-                      remarkPlugins={[gfm]} // Removed className from here
-                    >
+                    <ReactMarkdown remarkPlugins={[gfm]}>
                       {message.content}
                     </ReactMarkdown>
                     <span className="text-xs opacity-70 mt-1 block">
@@ -326,8 +366,30 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
         </div>
       </ScrollArea>
 
+      {/* Payment Button */}
+      {pendingPayment && !isLoading && (
+        <div className="p-3 border-t border-border/50 bg-secondary/20 space-y-2">
+          <Button 
+            onClick={handlePayNow}
+            disabled={paymentProcessing}
+            className="w-full bg-crypto-green hover:bg-crypto-green/90 text-white"
+            size="sm"
+          >
+            <Zap className="w-4 h-4 mr-2" />
+            {paymentProcessing ? "Processing..." : `Pay ${pendingPayment.paymentDetails.amount} AVAX Now`}
+          </Button>
+          <button
+            onClick={handleCancelPayment}
+            disabled={paymentProcessing}
+            className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Apply Strategy Button */}
-      {hasStrategyToApply && (
+      {hasStrategyToApply && !pendingPayment && (
         <div className="p-3 border-t border-border/50 bg-secondary/20">
           <Button 
             onClick={handleApplyStrategy}
@@ -349,11 +411,11 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
             onKeyPress={handleKeyPress}
             placeholder="Ask about strategies, market analysis, or any crypto insights..."
             className="flex-1 bg-background/50 border-border/50 focus:border-primary"
-            disabled={isLoading}
+            disabled={isLoading || paymentProcessing}
           />
           <Button 
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading || paymentProcessing}  // New: Disable during payment
+            onClick={() => handleSendMessage()}
+            disabled={!inputValue.trim() || isLoading || paymentProcessing}
             className="bg-gradient-primary hover:shadow-glow transition-all duration-200"
           >
             <Send className="w-4 h-4" />
