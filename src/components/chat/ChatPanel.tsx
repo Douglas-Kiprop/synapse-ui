@@ -8,9 +8,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { toast as sonnerToast } from "sonner";  // Direct sonner for loading/dismiss
 import { StrategyBubble } from "./StrategyBubble";
 import { useAgentPanel } from "@/contexts/AgentPanelContext";
 import { useAuthFetch } from "@/hooks/useAuthFetch";
+import { usePayment, PaymentResult } from "@/hooks/usePayment";  // New: For x402 payments
 
 interface Message {
   id: string;
@@ -53,9 +55,30 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [hasStrategyToApply, setHasStrategyToApply] = useState(false);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+  const { toast: shadcnToast } = useToast();  // Shadcn for simple toasts
   const { closeAgent } = useAgentPanel();
   const { fetchWithAuth } = useAuthFetch();
+
+  // New: x402 payment hook
+  const { handlePayment, isProcessing: paymentProcessing } = usePayment({
+    treasuryAddress: import.meta.env.VITE_TREASURY_ADDRESS || "0xYourDeployedReceiverAddress",  // Add to .env
+    feeAmount: 0.0005,
+    onSuccess: (result: PaymentResult) => {
+      if (result.txnHash) {
+        // Auto-retry API with txn hash for backend verification
+        retryWithPayment(result.txnHash);
+      }
+    },
+    onError: (error) => {
+      shadcnToast({
+        title: "Payment Error",
+        description: error,
+        variant: "destructive",
+      });
+      setIsLoading(false);  // Reset loading on error
+    },
+    description: "Premium Tool Access",
+  });
 
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,6 +87,45 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
   useEffect(() => {
     setHasStrategyToApply(!!currentStrategy);
   }, [currentStrategy]);
+
+  // New: Helper for retry after payment
+  const retryWithPayment = async (txnHash: `0x${string}`) => {
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL;
+      const retryResponse = await fetchWithAuth(`${backendUrl}/x402/pay-and-execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          tool: "premium_coingecko",  // From 402 details or query (customize as needed)
+          txn_hash: txnHash 
+        }),
+      });
+
+      if (!retryResponse.ok) {
+        throw new Error(`Retry failed: ${retryResponse.status}`);
+      }
+
+      const retryData = await retryResponse.json();
+      const agentResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        content: retryData.data?.response || "Tool executed successfully after payment.",
+        sender: "agent",
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, agentResponse]);
+      sonnerToast.loading("Payment verified—tool executing...", { id: "payment-verify" });  // Sonner loading
+      sonnerToast.dismiss("payment-verify");
+      sonnerToast.success("Premium tool unlocked!");
+    } catch (retryErr) {
+      console.error("Retry after payment failed:", retryErr);
+      shadcnToast({
+        title: "Execution Error",
+        description: "Payment succeeded, but tool execution failed. Try again.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
@@ -84,7 +146,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
 
       if (!backendUrl) {
         console.error("VITE_BACKEND_URL is not defined in the environment variables.");
-        toast({
+        shadcnToast({
           title: "Error",
           description: "Backend URL is not configured. Please check your .env files.",
           variant: "destructive",
@@ -93,13 +155,31 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
         return;
       }
 
-      const response = await fetchWithAuth(backendUrl, {
+      let response = await fetchWithAuth(backendUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ message: inputValue }),
       });
+
+      // New: Handle x402 Payment Required
+      if (response.status === 402) {
+        const paymentDetails = await response.json();  // Expect { error: "...", details: { payment: { ... } } }
+        shadcnToast({
+          title: "Premium Access Required",
+          description: `Pay ${paymentDetails.details?.payment?.amount || 0.0005} AVAX to unlock this tool?`,
+        });
+
+        const paymentResult = await handlePayment();
+        if (!paymentResult.success) {
+          return;  // User cancelled or failed; loading already reset in onError
+        }
+
+        // Payment succeeded—loading continues (retry handled in onSuccess)
+        sonnerToast.loading("Verifying payment and executing tool...");
+        return;  // Don't process further here
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -117,20 +197,22 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
       setMessages(prev => [...prev, agentResponse]);
     } catch (error) {
       console.error("Error sending message to backend:", error);
-      toast({
+      shadcnToast({
         title: "Error",
         description: "Failed to connect to the Synapse Agent. Please ensure your backend is running and accessible.",
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      if (!paymentProcessing) {  // Only reset if not in payment flow
+        setIsLoading(false);
+      }
     }
   };
 
   const handleApplyStrategy = () => {
     if (onApplyStrategy && currentStrategy) {
       onApplyStrategy(currentStrategy);
-      toast({
+      shadcnToast({
         title: "Strategy Applied",
         description: "Your strategy has been updated in the Strategy Builder.",
       });
@@ -271,7 +353,7 @@ export function ChatPanel({ onApplyStrategy, currentStrategy }: ChatPanelProps) 
           />
           <Button 
             onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
+            disabled={!inputValue.trim() || isLoading || paymentProcessing}  // New: Disable during payment
             className="bg-gradient-primary hover:shadow-glow transition-all duration-200"
           >
             <Send className="w-4 h-4" />
