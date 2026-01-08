@@ -50,7 +50,8 @@ export const ConditionEditor = ({
               <SelectItem value="technical_indicator">Technical Indicator</SelectItem>
               <SelectItem value="price_alert">Price Alert</SelectItem>
               <SelectItem value="volume_alert">Volume Alert</SelectItem>
-              <SelectItem value="wallet_inflow">Wallet Inflow</SelectItem>
+              <SelectItem value="wallet_flow">Wallet Flow</SelectItem>
+              <SelectItem value="exchange_flow">Exchange Flow</SelectItem>
               <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
@@ -171,57 +172,78 @@ export const ConditionEditor = ({
           </div>
         )}
 
-        {condition.type === "volume_alert" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-             <div>
+        {condition.type === "wallet_flow" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Entity Type</Label>
+              <Select value={condition.payload.entity_type ?? "individual"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, entity_type: v, label: v === 'group' ? 'smart_money' : undefined, address: v === 'individual' ? '' : undefined } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="individual">Specific Address</SelectItem>
+                  <SelectItem value="group">Labeled Group</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Direction</Label>
+              <Select value={condition.payload.direction ?? "inflow"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, direction: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="inflow">Inflow</SelectItem><SelectItem value="outflow">Outflow</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Asset</Label>
-              <Input
-                value={condition.payload.asset ?? ""}
-                onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, asset: e.target.value } })}
-                className="h-9"
-                placeholder="e.g., BTC"
-              />
+              <Input value={condition.payload.asset ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, asset: e.target.value.toUpperCase() } })} className="h-9" placeholder="e.g. ETH" />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Timeframe</Label>
-              <Select
-                value={condition.payload.timeframe ?? "1h"}
-                onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, timeframe: v } })}
-              >
+              <Label className="text-xs text-muted-foreground mb-1 block">{condition.payload.entity_type === 'group' ? 'Label Name' : 'Wallet Address'}</Label>
+              {condition.payload.entity_type === 'group' ? (
+                <Select value={condition.payload.label ?? "smart_money"} onValueChange={(v) => onChange({ ...condition, payload: { ...condition.payload, label: v } })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="smart_money">Smart Money Whales</SelectItem>
+                    <SelectItem value="exchange_wallets">Exchange Wallets</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input 
+                  value={condition.payload.address ?? ""} 
+                  onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, address: e.target.value } })}
+                  className="h-9" 
+                  placeholder="0x..." 
+                />
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Min Value (USD)</Label>
+              <Input type="number" value={condition.payload.value ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })} className="h-9" />
+            </div>
+          </div>
+        )}
+
+        {condition.type === "exchange_flow" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Exchange</Label>
+              <Select value={condition.payload.exchange ?? "binance"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, exchange: v } })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1m">1 Minute</SelectItem>
-                  <SelectItem value="5m">5 Minutes</SelectItem>
-                  <SelectItem value="15m">15 Minutes</SelectItem>
-                  <SelectItem value="30m">30 Minutes</SelectItem>
-                  <SelectItem value="1h">1 Hour</SelectItem>
-                  <SelectItem value="4h">4 Hours</SelectItem>
-                  <SelectItem value="1d">1 Day</SelectItem>
-                </SelectContent>
+                <SelectContent>{["binance", "coinbase", "okx", "kraken", "bybit"].map(ex => <SelectItem key={ex} value={ex}>{ex.toUpperCase()}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">Operator</Label>
-              <Select
-                value={condition.payload.operator ?? "gt"}
-                onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, operator: v } })}
-              >
+              <Label className="text-xs text-muted-foreground mb-1 block">Flow Type</Label>
+              <Select value={condition.payload.flow_type ?? "net_flow"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, flow_type: v } })}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gt">Greater than (&gt;)</SelectItem>
-                  <SelectItem value="lt">Less than (&lt;)</SelectItem>
-                </SelectContent>
+                <SelectContent><SelectItem value="deposit">Deposit</SelectItem><SelectItem value="withdrawal">Withdrawal</SelectItem><SelectItem value="net_flow">Net Flow</SelectItem></SelectContent>
               </Select>
             </div>
-             <div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Asset</Label>
+              <Input value={condition.payload.asset ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, asset: e.target.value.toUpperCase() } })} className="h-9" placeholder="e.g. BTC" />
+            </div>
+            <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Threshold</Label>
-              <Input
-                type="number"
-                value={condition.payload.threshold ?? ""}
-                onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, threshold: parseFloat(e.target.value) || 0 } })}
-                className="h-9"
-                placeholder="e.g., 1000000"
-              />
+              <Input type="number" value={condition.payload.value ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })} className="h-9" />
             </div>
           </div>
         )}

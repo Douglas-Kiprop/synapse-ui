@@ -40,6 +40,10 @@ export const getPreviewSummary = (condition: BaseCondition) => {
     case "technical_indicator": return `${p.indicator?.toUpperCase() || 'RSI'} ${p.operator || '<'} ${p.value || 30}`;
     case "price_alert": return `${p.asset || 'Asset'} ${p.direction || 'crosses'} ${p.target_price || '0'}`;
     case "volume_alert": return `Volume > ${p.threshold || 0}`;
+    case "wallet_flow": 
+      return `${p.direction === 'inflow' ? 'Inflow' : 'Outflow'} to ${p.label || 'Wallet'} > ${p.value || 0} ${p.asset || ''}`;
+    case "exchange_flow":
+      return `${p.exchange || 'Exchange'} ${p.flow_type || 'Net Flow'} > ${p.value || 0} ${p.asset || ''}`;
     default: return "Custom Condition";
   }
 };

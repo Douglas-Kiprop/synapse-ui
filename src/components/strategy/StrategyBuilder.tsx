@@ -65,10 +65,19 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
   const removeAsset = (a: string) => setAssets(assets.filter(x => x !== a));
 
   // -- Logic Actions --
-  const createEmptyCondition = (type: ConditionType = "technical_indicator"): BaseCondition => ({
-    id: uid(), type, label: "", enabled: true,
-    payload: type === "technical_indicator" ? { indicator: "rsi", params: { period: 14 }, operator: "lt", value: 30, asset: "BTC", timeframe: "1h" } : {},
-  });
+  const createEmptyCondition = (type: ConditionType = "technical_indicator"): BaseCondition => {
+    const base = { id: uid(), type, label: "", enabled: true };
+    switch (type) {
+      case "technical_indicator":
+        return { ...base, payload: { indicator: "rsi", params: { period: 14 }, operator: "lt", value: 30, asset: "BTC", timeframe: "1h" } };
+      case "wallet_flow":
+        return { ...base, payload: { direction: "inflow", entity_type: "address", address: "", label: "Smart Money", asset: "ETH", value: 100000 } };
+      case "exchange_flow":
+        return { ...base, payload: { flow_type: "net_flow", exchange: "binance", asset: "BTC", value: 1000 } };
+      default:
+        return { ...base, payload: {} };
+    }
+  };
 
   const addConditionToGroup = (targetId: UUID) => {
     const newCondition = createEmptyCondition();
@@ -154,7 +163,24 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
           threshold: baseCondition.payload?.threshold ?? 0,
         };
         break;
-      case "wallet_inflow":
+      case "wallet_flow":
+        sanitizedPayload = {
+          direction: baseCondition.payload?.direction ?? "inflow",
+          entity_type: baseCondition.payload?.entity_type ?? "address",
+          address: baseCondition.payload?.address ?? "",
+          label: baseCondition.payload?.label ?? "Whale",
+          asset: baseCondition.payload?.asset ?? "ETH",
+          value: Number(baseCondition.payload?.value) || 0,
+        };
+        break;
+      case "exchange_flow":
+        sanitizedPayload = {
+          flow_type: baseCondition.payload?.flow_type ?? "net_flow",
+          exchange: baseCondition.payload?.exchange ?? "binance",
+          asset: baseCondition.payload?.asset ?? "BTC",
+          value: Number(baseCondition.payload?.value) || 0,
+        };
+        break;
       case "custom":
       default:
         sanitizedPayload = baseCondition.payload || {};
@@ -266,7 +292,25 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
                     <div className="absolute top-4 left-4 z-10 bg-background/90 backdrop-blur p-3 rounded-lg border shadow-lg space-y-3">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Drag & Drop Nodes</p>
                         <div className="flex flex-col gap-2">
-                            <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => addConditionToGroup(logicTree.id!)}><Activity className="w-3.5 h-3.5 mr-2 text-blue-500" /> New Condition</Button>
+                            <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => addConditionToGroup(logicTree.id!)}><Activity className="w-3.5 h-3.5 mr-2 text-blue-500" /> New Technical Condition</Button>
+                            <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => {
+                              const newCond = createEmptyCondition("wallet_flow");
+                              setConditions((prev) => [...prev, newCond]);
+                              setLogicTree((prev) => {
+                                const cloned = JSON.parse(JSON.stringify(prev));
+                                cloned.conditions.push({ ref: newCond.id });
+                                return cloned;
+                              });
+                            }}><Activity className="w-3.5 h-3.5 mr-2 text-indigo-500" /> New Wallet Flow</Button>
+                            <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => {
+                              const newCond = createEmptyCondition("exchange_flow");
+                              setConditions((prev) => [...prev, newCond]);
+                              setLogicTree((prev) => {
+                                const cloned = JSON.parse(JSON.stringify(prev));
+                                cloned.conditions.push({ ref: newCond.id });
+                                return cloned;
+                              });
+                            }}><Activity className="w-3.5 h-3.5 mr-2 text-orange-500" /> New Exchange Flow</Button>
                             <Button variant="outline" size="sm" className="justify-start h-9 text-xs font-medium" onClick={() => addGroupToGroup(logicTree.id!)}><GitBranch className="w-3.5 h-3.5 mr-2 text-purple-500" /> New Logic Group</Button>
                         </div>
                     </div>

@@ -53,7 +53,7 @@ type StrategyStatus = StrategyModel["status"];
  */
 const StatusBadge: React.FC<{ status: StrategyStatus; className?: string }> = ({ status, className }) => {
   let colorClass = "";
-  let text = status.charAt(0).toUpperCase() + status.slice(1);
+  const text = status.charAt(0).toUpperCase() + status.slice(1);
 
   switch (status) {
     case "active":
