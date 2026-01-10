@@ -44,6 +44,12 @@ export const getPreviewSummary = (condition: BaseCondition) => {
       return `${p.direction === 'inflow' ? 'Inflow' : 'Outflow'} to ${p.label || 'Wallet'} > ${p.value || 0} ${p.asset || ''}`;
     case "exchange_flow":
       return `${p.exchange || 'Exchange'} ${p.flow_type || 'Net Flow'} > ${p.value || 0} ${p.asset || ''}`;
+    case "liquidity_change":
+      return `${p.metric === 'tvl_change' ? 'TVL' : 'Imbalance'} ${p.direction} ${p.value || 0}%`;
+    case "yield_change":
+      return `${p.protocol !== 'auto' ? p.protocol : 'Vault'} APY ${p.direction} ${p.value || 0}%`;
+    case "impermanent_loss":
+      return `IL ${p.direction} > ${p.threshold || 0}% (${p.position_type})`;
     default: return "Custom Condition";
   }
 };

@@ -52,6 +52,9 @@ export const ConditionEditor = ({
               <SelectItem value="volume_alert">Volume Alert</SelectItem>
               <SelectItem value="wallet_flow">Wallet Flow</SelectItem>
               <SelectItem value="exchange_flow">Exchange Flow</SelectItem>
+              <SelectItem value="liquidity_change">Liquidity Change</SelectItem>
+              <SelectItem value="yield_change">Yield APY Change</SelectItem>
+              <SelectItem value="impermanent_loss">Impermanent Loss</SelectItem>
               <SelectItem value="custom">Custom</SelectItem>
             </SelectContent>
           </Select>
@@ -244,6 +247,109 @@ export const ConditionEditor = ({
             <div>
               <Label className="text-xs text-muted-foreground mb-1 block">Threshold</Label>
               <Input type="number" value={condition.payload.value ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })} className="h-9" />
+            </div>
+          </div>
+        )}
+
+        {condition.type === "liquidity_change" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Pool Address</Label>
+              <Input value={condition.payload.pool_address ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, pool_address: e.target.value } })} className="h-9" placeholder="0x..." />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Metric</Label>
+              <Select value={condition.payload.metric ?? "tvl_change"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, metric: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tvl_change">TVL Change</SelectItem>
+                  <SelectItem value="liquidity_imbalance">Liquidity Imbalance</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Direction</Label>
+              <Select value={condition.payload.direction ?? "increase"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, direction: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
+                  <SelectItem value="absolute_change">Absolute Change</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Value (%)</Label>
+              <Input type="number" value={condition.payload.value ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })} className="h-9" />
+            </div>
+          </div>
+        )}
+
+        {condition.type === "yield_change" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Vault/Farm Address</Label>
+              <Input value={condition.payload.vault_address ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, vault_address: e.target.value } })} className="h-9" placeholder="0x..." />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Protocol</Label>
+              <Select value={condition.payload.protocol ?? "auto"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, protocol: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto-detect</SelectItem>
+                  <SelectItem value="yearn">Yearn</SelectItem>
+                  <SelectItem value="beefy">Beefy</SelectItem>
+                  <SelectItem value="aave">Aave</SelectItem>
+                  <SelectItem value="pendle">Pendle</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Direction</Label>
+              <Select value={condition.payload.direction ?? "decrease"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, direction: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">APY % Change</Label>
+              <Input type="number" value={condition.payload.value ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, value: parseFloat(e.target.value) || 0 } })} className="h-9" />
+            </div>
+          </div>
+        )}
+
+        {condition.type === "impermanent_loss" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Pool Address</Label>
+              <Input value={condition.payload.pool_address ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, pool_address: e.target.value } })} className="h-9" placeholder="0x..." />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Position Type</Label>
+              <Select value={condition.payload.position_type ?? "v2"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, position_type: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="v2">Uniswap V2</SelectItem>
+                  <SelectItem value="v3">Uniswap V3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Direction</Label>
+              <Select value={condition.payload.direction ?? "increase"} onValueChange={(v: any) => onChange({ ...condition, payload: { ...condition.payload, direction: v } })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="md:col-span-2">
+              <Label className="text-xs text-muted-foreground mb-1 block">Threshold (%)</Label>
+              <Input type="number" value={condition.payload.threshold ?? ""} onChange={(e) => onChange({ ...condition, payload: { ...condition.payload, threshold: parseFloat(e.target.value) || 0 } })} className="h-9" />
             </div>
           </div>
         )}

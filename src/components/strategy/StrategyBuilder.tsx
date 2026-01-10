@@ -74,6 +74,12 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
         return { ...base, payload: { direction: "inflow", entity_type: "address", address: "", label: "Smart Money", asset: "ETH", value: 100000 } };
       case "exchange_flow":
         return { ...base, payload: { flow_type: "net_flow", exchange: "binance", asset: "BTC", value: 1000 } };
+      case "liquidity_change":
+        return { ...base, payload: { pool_address: "", protocol: "auto", metric: "tvl_change", direction: "increase", value: 10 } };
+      case "yield_change":
+        return { ...base, payload: { vault_address: "", protocol: "auto", direction: "decrease", value: 5 } };
+      case "impermanent_loss":
+        return { ...base, payload: { pool_address: "", position_type: "v2", threshold: 2, direction: "increase" } };
       default:
         return { ...base, payload: {} };
     }
@@ -179,6 +185,31 @@ export default function AdvancedStrategyBuilder({ initial, onSave }: AdvancedStr
           exchange: baseCondition.payload?.exchange ?? "binance",
           asset: baseCondition.payload?.asset ?? "BTC",
           value: Number(baseCondition.payload?.value) || 0,
+        };
+        break;
+      case "liquidity_change":
+        sanitizedPayload = {
+          pool_address: baseCondition.payload?.pool_address ?? "",
+          protocol: baseCondition.payload?.protocol ?? "auto",
+          metric: baseCondition.payload?.metric ?? "tvl_change",
+          direction: baseCondition.payload?.direction ?? "increase",
+          value: Number(baseCondition.payload?.value) || 0,
+        };
+        break;
+      case "yield_change":
+        sanitizedPayload = {
+          vault_address: baseCondition.payload?.vault_address ?? "",
+          protocol: baseCondition.payload?.protocol ?? "auto",
+          direction: baseCondition.payload?.direction ?? "decrease",
+          value: Number(baseCondition.payload?.value) || 0,
+        };
+        break;
+      case "impermanent_loss":
+        sanitizedPayload = {
+          pool_address: baseCondition.payload?.pool_address ?? "",
+          position_type: baseCondition.payload?.position_type ?? "v2",
+          threshold: Number(baseCondition.payload?.threshold) || 0,
+          direction: baseCondition.payload?.direction ?? "increase",
         };
         break;
       case "custom":

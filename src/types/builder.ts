@@ -2,7 +2,16 @@ import { BaseCondition as ApiBaseCondition } from "@/types/strategy";
 
 export type UUID = string;
 export type LogicOperator = "AND" | "OR";
-export type ConditionType = "technical_indicator" | "price_alert" | "volume_alert" | "wallet_flow" | "exchange_flow" | "custom";
+export type ConditionType = 
+  | "technical_indicator" 
+  | "price_alert" 
+  | "volume_alert" 
+  | "wallet_flow" 
+  | "exchange_flow" 
+  | "liquidity_change"
+  | "yield_change"
+  | "impermanent_loss"
+  | "custom";
 
 export interface BaseCondition {
   id: UUID;

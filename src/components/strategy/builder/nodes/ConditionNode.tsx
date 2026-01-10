@@ -123,6 +123,82 @@ export const ConditionNode: React.FC<{ data: ConditionNodeData; selected?: boole
             </div>
           </div>
         );
+
+      case "liquidity_change":
+        return (
+          <div className="space-y-2 pt-2 border-t">
+            <Input value={condition.payload.pool_address || ""} placeholder="Pool Address" onChange={(e) => updatePayload("pool_address", e.target.value)} className="h-7 text-[10px]" />
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={condition.payload.metric || "tvl_change"} onValueChange={(v) => updatePayload("metric", v)}>
+                <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tvl_change">TVL Change</SelectItem>
+                  <SelectItem value="liquidity_imbalance">Imbalance</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={condition.payload.direction} onValueChange={(v) => updatePayload("direction", v)}>
+                <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
+                  <SelectItem value="absolute_change">Absolute</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Input type="number" value={condition.payload.value || ""} placeholder="Value (%)" onChange={(e) => updatePayload("value", e.target.value)} className="h-7 text-[10px]" />
+          </div>
+        );
+
+      case "yield_change":
+        return (
+          <div className="space-y-2 pt-2 border-t">
+            <Input value={condition.payload.vault_address || ""} placeholder="Vault Address" onChange={(e) => updatePayload("vault_address", e.target.value)} className="h-7 text-[10px]" />
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={condition.payload.protocol || "auto"} onValueChange={(v) => updatePayload("protocol", v)}>
+                <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto-detect</SelectItem>
+                  <SelectItem value="yearn">Yearn</SelectItem>
+                  <SelectItem value="beefy">Beefy</SelectItem>
+                  <SelectItem value="aave">Aave</SelectItem>
+                  <SelectItem value="pendle">Pendle</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={condition.payload.direction} onValueChange={(v) => updatePayload("direction", v)}>
+                <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Input type="number" value={condition.payload.value || ""} placeholder="APY % Change" onChange={(e) => updatePayload("value", e.target.value)} className="h-7 text-[10px]" />
+          </div>
+        );
+
+      case "impermanent_loss":
+        return (
+          <div className="space-y-2 pt-2 border-t">
+            <Input value={condition.payload.pool_address || ""} placeholder="Pool Address" onChange={(e) => updatePayload("pool_address", e.target.value)} className="h-7 text-[10px]" />
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={condition.payload.position_type || "v2"} onValueChange={(v) => updatePayload("position_type", v)}>
+                <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="v2">Uniswap V2</SelectItem>
+                  <SelectItem value="v3">Uniswap V3</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={condition.payload.direction} onValueChange={(v) => updatePayload("direction", v)}>
+                <SelectTrigger className="h-7 text-[10px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="increase">Increase</SelectItem>
+                  <SelectItem value="decrease">Decrease</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Input type="number" value={condition.payload.threshold || ""} placeholder="Threshold %" onChange={(e) => updatePayload("threshold", e.target.value)} className="h-7 text-[10px]" />
+          </div>
+        );
       default:
         return (
           <div className="space-y-2 pt-1 border-t">
